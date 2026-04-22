@@ -51,17 +51,9 @@ const LoginPage = () => {
               <Users className="h-5 w-5" />
               Login as Family
             </Button>
-            <div className="relative py-4">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">New to Smart Care?</span>
-              </div>
-            </div>
-            <Button onClick={() => navigate("/register")} className="w-full h-14 text-base gap-3" variant="secondary">
-              <UserPlus className="h-5 w-5 text-primary" />
-              Register New Patient
+            <Button onClick={() => navigate("/register")} className="w-full h-14 text-base gap-3 bg-success hover:bg-success/90 text-success-foreground border-none">
+              <UserPlus className="h-5 w-5" />
+              New Patient Registration
             </Button>
           </div>
         )}
