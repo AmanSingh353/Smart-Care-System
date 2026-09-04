@@ -1,8 +1,8 @@
-import { useState } from "react";
 import { StaffLayout } from "@/components/StaffLayout";
 import { usePatients } from "@/contexts/PatientContext";
+import { isPatientActive } from "@/data/mockData";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Package, CheckCircle } from "lucide-react";
@@ -10,10 +10,16 @@ import { Package, CheckCircle } from "lucide-react";
 const PharmacyPage = () => {
   const { patients, dispenseMedicine } = usePatients();
 
-  const pending: { patientId: string; patientName: string; medicines: { id: string; name: string; dosage: string; quantity: string }[] }[] = [];
-  const ready: typeof pending = [];
+  type Entry = {
+    patientId: string;
+    patientName: string;
+    medicines: { id: string; name: string; dosage: string; quantity: string }[];
+  };
 
-  patients.filter(p => p.status === "Active").forEach(p => {
+  const pending: Entry[] = [];
+  const ready: Entry[] = [];
+
+  patients.filter(isPatientActive).forEach(p => {
     const pendingMeds = p.medicines.filter(m => !m.dispensed);
     const readyMeds = p.medicines.filter(m => m.dispensed);
     if (pendingMeds.length > 0) {
@@ -33,37 +39,40 @@ const PharmacyPage = () => {
   });
 
   return (
-    <StaffLayout>
-      <h2 className="text-xl font-bold text-foreground mb-6">Pending & Prepared Medicines</h2>
+    <StaffLayout allowedRoles={["pharmacy", "admin"]}>
+      <h2 className="text-xl font-bold text-foreground mb-2">Pharmacy</h2>
+      <p className="text-sm text-muted-foreground mb-6">Prescriptions from doctors appear here in real time</p>
 
       <Tabs defaultValue="pending">
         <TabsList>
-          <TabsTrigger value="pending">Pending Prescriptions ({pending.length})</TabsTrigger>
-          <TabsTrigger value="ready">Ready for Collection ({ready.length})</TabsTrigger>
+          <TabsTrigger value="pending">Pending ({pending.reduce((n, e) => n + e.medicines.length, 0)})</TabsTrigger>
+          <TabsTrigger value="ready">Ready ({ready.reduce((n, e) => n + e.medicines.length, 0)})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pending" className="mt-4 space-y-3">
           {pending.length === 0 && (
-            <Card><CardContent className="py-8 text-center text-muted-foreground">No pending prescriptions</CardContent></Card>
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground">No pending prescriptions</CardContent>
+            </Card>
           )}
           {pending.map(entry => (
-            <Card key={entry.patientId} className="animate-fade-in">
+            <Card key={entry.patientId}>
               <CardContent className="pt-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <span className="font-medium text-primary text-sm">{entry.patientId}</span>
-                    <span className="text-foreground text-sm ml-2">{entry.patientName}</span>
-                  </div>
+                <div className="mb-3">
+                  <span className="font-medium text-primary text-sm">{entry.patientId}</span>
+                  <span className="text-foreground text-sm ml-2">{entry.patientName}</span>
                 </div>
                 <div className="space-y-2">
                   {entry.medicines.map(m => (
                     <div key={m.id} className="flex items-center justify-between bg-muted/50 rounded-md px-3 py-2 text-sm">
                       <div>
                         <span className="text-foreground font-medium">{m.name}</span>
-                        <span className="text-muted-foreground ml-2">{m.dosage} · {m.quantity} days</span>
+                        <span className="text-muted-foreground ml-2">
+                          {m.dosage} · {m.quantity} days
+                        </span>
                       </div>
                       <Button size="sm" variant="outline" onClick={() => dispenseMedicine(entry.patientId, m.id)} className="gap-1">
-                        <Package className="h-3.5 w-3.5" /> Mark as Packed
+                        <Package className="h-3.5 w-3.5" /> Mark Packed
                       </Button>
                     </div>
                   ))}
@@ -75,10 +84,12 @@ const PharmacyPage = () => {
 
         <TabsContent value="ready" className="mt-4 space-y-3">
           {ready.length === 0 && (
-            <Card><CardContent className="py-8 text-center text-muted-foreground">No medicines ready yet</CardContent></Card>
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground">No medicines ready yet</CardContent>
+            </Card>
           )}
           {ready.map(entry => (
-            <Card key={entry.patientId} className="animate-fade-in">
+            <Card key={entry.patientId}>
               <CardContent className="pt-4">
                 <div className="flex items-center justify-between mb-3">
                   <div>
