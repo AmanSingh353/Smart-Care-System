@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { PatientProvider } from "@/contexts/PatientContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
 import ReceptionPage from "./pages/ReceptionPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import DoctorPanel from "./pages/DoctorPanel";
@@ -21,6 +22,7 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
+<<<<<<< HEAD
       <AuthProvider>
         <PatientProvider>
           <Toaster />
@@ -41,6 +43,26 @@ const App = () => (
           </BrowserRouter>
         </PatientProvider>
       </AuthProvider>
+=======
+      <PatientProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/reception" element={<ReceptionPage />} />
+            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/doctor" element={<DoctorPanel />} />
+            <Route path="/pharmacy" element={<PharmacyPage />} />
+            <Route path="/nurse" element={<NursePage />} />
+            <Route path="/billing" element={<BillingPage />} />
+            <Route path="/family/:patientId" element={<FamilyDashboard />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </PatientProvider>
+>>>>>>> e0ea6208b597f1c38a568699f8bf863394a2f0fb
     </TooltipProvider>
   </QueryClientProvider>
 );
