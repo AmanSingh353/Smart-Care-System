@@ -18,6 +18,7 @@ import hospitalLogo from "@/assets/hospital-logo.png";
 import { useAuth, ROLE_NAV, ROLE_LABELS, StaffRole } from "@/contexts/AuthContext";
 import { usePatients } from "@/contexts/PatientContext";
 import { useCareGuard } from "@/contexts/CareGuardContext";
+import { DemoModeBanner } from "@/components/DemoModeBanner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -200,7 +201,10 @@ export const StaffLayout = ({ children, allowedRoles }: { children: ReactNode; a
           </div>
         </header>
 
-        <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-[1400px] w-full mx-auto animate-fade-in">{children}</main>
+        <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-[1400px] w-full mx-auto animate-fade-in overflow-x-hidden">
+          <DemoModeBanner />
+          {children}
+        </main>
       </div>
     </div>
   );

@@ -4,11 +4,12 @@ import { PageHeader } from "@/components/dashboard/PageHeader";
 import { PatientWorkspace } from "@/components/patient/PatientWorkspace";
 import { usePatients } from "@/contexts/PatientContext";
 import { DOCTORS, ROOMS } from "@/data/mockData";
+import { CANONICAL_DEMO_PATIENT } from "@/config/demo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle2, ArrowLeft } from "lucide-react";
+import { CheckCircle2, ArrowLeft, Sparkles } from "lucide-react";
 
 const ReceptionPage = () => {
   const { addPatient, patients, getPatientById } = usePatients();
@@ -31,6 +32,23 @@ const ReceptionPage = () => {
   const set = (key: string, value: string) => {
     if (!startedAt) setStartedAt(Date.now());
     setForm(f => ({ ...f, [key]: value }));
+  };
+
+  const fillCanonicalDemo = () => {
+    setStartedAt(Date.now());
+    setForm(f => ({
+      ...f,
+      name: CANONICAL_DEMO_PATIENT.name,
+      age: CANONICAL_DEMO_PATIENT.age,
+      gender: CANONICAL_DEMO_PATIENT.gender,
+      phone: CANONICAL_DEMO_PATIENT.phone,
+      emergencyContact: CANONICAL_DEMO_PATIENT.emergencyContact,
+      visitType: CANONICAL_DEMO_PATIENT.visitType,
+      allergies: CANONICAL_DEMO_PATIENT.allergies,
+      symptoms: CANONICAL_DEMO_PATIENT.symptoms,
+      roomKey: "101-A",
+      doctorIndex: "0",
+    }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -96,6 +114,15 @@ const ReceptionPage = () => {
         {!registered ? (
           <Card className="rounded-2xl shadow-card">
             <CardContent className="pt-6">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Judge demo: use <span className="font-semibold text-foreground">{CANONICAL_DEMO_PATIENT.name}</span>
+                </p>
+                <Button type="button" size="sm" variant="outline" className="gap-1.5" onClick={fillCanonicalDemo}>
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Fill canonical demo patient
+                </Button>
+              </div>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <Label>Patient Name *</Label>
@@ -182,6 +209,9 @@ const ReceptionPage = () => {
               </div>
               <p className="text-sm text-muted-foreground">
                 Registered in <span className="font-semibold text-foreground">{registered.time}s</span> · Record is live across Doctor, Nurse, Pharmacy & Family
+              </p>
+              <p className="text-xs text-muted-foreground rounded-xl bg-background/80 border border-border px-3 py-2">
+                Family login ID: <span className="font-semibold text-foreground">{registered.id}</span>
               </p>
               <div className="flex flex-col sm:flex-row gap-2 justify-center">
                 <Button onClick={() => setViewPatientId(registered.id)}>Open Patient Workspace</Button>

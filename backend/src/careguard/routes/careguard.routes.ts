@@ -12,6 +12,7 @@ router.get("/role/:role", careGuardController.getRoleSignals);
 router.get("/summary", careGuardController.getSummary);
 router.get("/audit", careGuardController.audit);
 router.post("/sync", careGuardController.syncPatients);
+router.post("/reset-demo", careGuardController.resetDemo);
 router.post("/:signalId/acknowledge", careGuardController.acknowledge);
 router.post("/:signalId/resolve", careGuardController.resolve);
 router.post("/:signalId/dismiss", careGuardController.dismiss);

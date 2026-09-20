@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useCallback } from "react";
+import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from "react";
 import {
   Patient,
   Medicine,
@@ -21,15 +21,19 @@ import {
   PRICE_CATALOG,
   DOCTORS,
   nowTime,
-  resetPatientIdCounter,
 } from "@/data/mockData";
 import { toast } from "sonner";
-
-const PATIENT_STORAGE = "scs30-patients";
+import {
+  PATIENT_STORAGE_KEY,
+  PATIENTS_BROADCAST,
+} from "@/config/demo";
+import { ensureDemoSeedVersion, resetAllDemoLocalState } from "@/config/demoReset";
+import { careguardService } from "@/services/careguardService";
 
 function loadPatients(): Patient[] {
+  ensureDemoSeedVersion();
   try {
-    const raw = localStorage.getItem(PATIENT_STORAGE);
+    const raw = localStorage.getItem(PATIENT_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Patient[];
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -37,15 +41,32 @@ function loadPatients(): Patient[] {
   } catch {
     /* ignore */
   }
-  return initialPatients;
+  return structuredClone(initialPatients);
 }
 
-function persistPatients(patients: Patient[]) {
+function persistPatients(patients: Patient[], broadcast = true) {
   try {
-    localStorage.setItem(PATIENT_STORAGE, JSON.stringify(patients));
+    localStorage.setItem(PATIENT_STORAGE_KEY, JSON.stringify(patients));
   } catch {
     /* ignore */
   }
+  if (broadcast && typeof BroadcastChannel !== "undefined") {
+    try {
+      const ch = new BroadcastChannel(PATIENTS_BROADCAST);
+      ch.postMessage({ type: "patients", patients });
+      ch.close();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+let syncTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleCareGuardSync(patients: Patient[]) {
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    void careguardService.syncPatients(patients);
+  }, 400);
 }
 
 export interface RegisterPatientInput {
@@ -136,6 +157,23 @@ const withNotification = (p: Patient, message: string, type?: string): Patient =
 
 export const PatientProvider = ({ children }: { children: ReactNode }) => {
   const [patients, setPatients] = useState<Patient[]>(() => loadPatients());
+
+  // Multi-tab sync — same browser, no refresh required for connected demos
+  useEffect(() => {
+    if (typeof BroadcastChannel === "undefined") return;
+    const ch = new BroadcastChannel(PATIENTS_BROADCAST);
+    ch.onmessage = (ev: MessageEvent<{ type: string; patients?: Patient[] }>) => {
+      if (ev.data?.type === "patients" && Array.isArray(ev.data.patients)) {
+        setPatients(ev.data.patients);
+      }
+    };
+    return () => ch.close();
+  }, []);
+
+  // Keep backend CareGuard engine in sync when available
+  useEffect(() => {
+    scheduleCareGuardSync(patients);
+  }, [patients]);
 
   const mutate = useCallback((id: string, updater: (p: Patient) => Patient) => {
     const key = normalizePatientId(id);
@@ -420,11 +458,30 @@ export const PatientProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const resetDemoData = () => {
-    resetPatientIdCounter(1008);
-    localStorage.removeItem(PATIENT_STORAGE);
-    localStorage.removeItem("scs30-careguard-signals");
-    setAllPatients(structuredClone(initialPatients));
-    toast.success("Demo patient data restored");
+    const next = resetAllDemoLocalState();
+    setAllPatients(next);
+    // Clear backend CareGuard memory if API is up (demo only)
+    void fetch(`${(import.meta.env.VITE_API_URL as string) || "http://localhost:5000"}/api/careguard/reset-demo`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-scs-role": "admin",
+        Authorization: `Bearer ${btoa(JSON.stringify({ role: "admin" }))}`,
+      },
+      body: JSON.stringify({
+        patients: next.map(p => ({
+          id: p.id,
+          name: p.name,
+          allergies: p.allergies,
+          treatmentStatus: p.treatmentStatus,
+          billStatus: p.billStatus,
+          medicines: p.medicines,
+          tests: p.tests,
+          billItems: p.billItems.map(b => ({ id: b.id })),
+        })),
+      }),
+    }).catch(() => undefined);
+    toast.success("Demo data restored — fictional patients & workflows reset");
   };
 
   const addNursingUpdate = (patientId: string, note: string, nurseName = "Nurse on duty") => {

@@ -120,7 +120,7 @@ const LoginPage = () => {
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Try demo IDs: SCS-1001, SCS-1002, SCS-1004, SCS-1005.
+                Use the Patient ID from Reception registration (canonical demo: Arjun Verma). Supporting demos: SCS-1001–1007.
               </p>
               <Button onClick={handleFamilyLogin} className="w-full">
                 Access Patient Info

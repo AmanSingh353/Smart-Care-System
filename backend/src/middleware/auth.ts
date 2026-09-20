@@ -82,10 +82,11 @@ export function canAccessPatient(req: Request, patientId: string): boolean {
   if (!req.user) return false;
   if (req.user.role === "admin") return true;
   if (req.user.role === "family") {
+    // Family may only access their bound patient — URL tampering is rejected
     return (req.user.patientId || "").toUpperCase() === patientId.toUpperCase();
   }
-  // Staff may view CareGuard for patients in the hospital demo
-  return true;
+  // Staff roles may view hospital patients in demo
+  return ["reception", "doctor", "nurse", "pharmacy", "billing", "lab"].includes(req.user.role);
 }
 
 export function mapFrontendRoleToCareGuard(role: string): string {

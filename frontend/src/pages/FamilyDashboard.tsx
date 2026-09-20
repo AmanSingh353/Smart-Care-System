@@ -1,22 +1,26 @@
-import { useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Navigate, useParams } from "react-router-dom";
 import { FamilyLayout } from "@/components/FamilyLayout";
 import { PatientWorkspace } from "@/components/patient/PatientWorkspace";
 import { usePatients } from "@/contexts/PatientContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { useState } from "react";
+import { normalizePatientId } from "@/data/mockData";
 
 const FamilyDashboard = () => {
   const { patientId } = useParams<{ patientId: string }>();
+  const { role, patientId: authPatientId, logout } = useAuth();
   const { getPatientById, addFamilyRequest, markAllNotificationsRead } = usePatients();
   const [requestType, setRequestType] = useState<string | null>(null);
   const [requestReason, setRequestReason] = useState("");
 
-  const patient = getPatientById(patientId || "");
+  const allowed = authPatientId ? normalizePatientId(authPatientId) : "";
+  const requested = normalizePatientId(patientId || "");
+  const patient = allowed ? getPatientById(allowed) : undefined;
 
   useEffect(() => {
     if (patient?.id) {
@@ -25,16 +29,37 @@ const FamilyDashboard = () => {
     }
   }, [patient?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  if (!role || role !== "family" || !authPatientId) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (requested && requested !== allowed) {
+    return <Navigate to={`/family/${allowed}`} replace />;
+  }
+
   if (!patient) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 px-4 bg-canvas">
-        <p className="text-sm text-muted-foreground">Patient not found for ID “{patientId}”.</p>
-        <a href="/login" className="text-sm text-primary hover:underline">
+        <p className="text-sm text-muted-foreground text-center">
+          No patient record found for your family session ({allowed}).
+        </p>
+        <button type="button" onClick={logout} className="text-sm text-primary hover:underline">
           Back to login
-        </a>
+        </button>
       </div>
     );
   }
+
+  const familyNotifications = patient.notifications.filter(
+    n =>
+      n.type === "family" ||
+      n.type === "medicine" ||
+      n.type === "test" ||
+      n.type === "billing" ||
+      n.type === "status" ||
+      n.type === "registration" ||
+      !n.type
+  );
 
   const handleSubmitRequest = () => {
     if (requestType && requestReason.trim()) {
@@ -115,14 +140,14 @@ const FamilyDashboard = () => {
 
       <section id="notifications" className="mt-6">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-          Notifications
+          Care updates
         </h3>
         <Card className="rounded-2xl shadow-card">
           <CardContent className="pt-4 space-y-2">
-            {patient.notifications.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">No notifications yet</p>
+            {familyNotifications.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">No updates yet</p>
             )}
-            {[...patient.notifications].reverse().map(n => (
+            {[...familyNotifications].reverse().map(n => (
               <div
                 key={n.id}
                 className={`text-sm rounded-xl px-3 py-2 ${

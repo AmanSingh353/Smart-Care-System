@@ -136,4 +136,23 @@ export const careGuardController = {
     }
     return res.json({ audit: getCareGuardAuditLog() });
   },
+
+  /** Admin-only demo reset of in-memory CareGuard store (no production DB). */
+  resetDemo(req: Request, res: Response) {
+    if (req.user?.role !== "admin") {
+      return res.status(403).json({ error: "Forbidden", message: "Admin only" });
+    }
+    careGuardEngine.reset([]);
+    const patients = (req.body?.patients || []) as CareGuardPatientSnapshot[];
+    if (Array.isArray(patients) && patients.length) {
+      for (const p of patients) {
+        if (p?.id) upsertPatientSnapshot(p);
+      }
+      evaluateAllPatients(getPatientSnapshots());
+    }
+    return res.json({
+      message: "Demo CareGuard state reset",
+      summary: getCareGuardSummary(),
+    });
+  },
 };
