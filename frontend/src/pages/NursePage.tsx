@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { StaffLayout } from "@/components/StaffLayout";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { usePatients } from "@/contexts/PatientContext";
 import { isPatientActive, PATIENT_STATUSES, PatientStatus, roomLabel } from "@/data/mockData";
 import { Button } from "@/components/ui/button";
@@ -39,8 +40,10 @@ const NursePage = () => {
 
   return (
     <StaffLayout allowedRoles={["nurse", "admin"]}>
-      <h2 className="text-xl font-bold text-foreground mb-2">Nursing Station</h2>
-      <p className="text-sm text-muted-foreground mb-6">Medicines, patient status, and nursing updates</p>
+      <PageHeader
+        title="Nursing Station"
+        description="Medicine tasks, patient status, and short updates for the care team and family."
+      />
 
       {overdue.length > 0 && (
         <div className="mb-6 p-3 bg-warning/10 border border-warning/20 rounded-lg flex items-start gap-2">

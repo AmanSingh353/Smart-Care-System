@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { PatientProvider } from "@/contexts/PatientContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import LoginPage from "./pages/LoginPage";
+import LandingPage from "./pages/LandingPage";
 import RegisterPage from "./pages/RegisterPage";
 import ReceptionPage from "./pages/ReceptionPage";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -28,7 +29,8 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <Routes>
-              <Route path="/" element={<LoginPage />} />
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/reception" element={<ReceptionPage />} />
               <Route path="/admin" element={<AdminDashboard />} />

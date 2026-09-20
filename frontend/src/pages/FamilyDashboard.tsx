@@ -30,7 +30,7 @@ const FamilyDashboard = () => {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 px-4">
         <p className="text-sm text-muted-foreground">Patient not found for ID “{patientId}”.</p>
-        <a href="/" className="text-sm text-primary hover:underline">
+        <a href="/login" className="text-sm text-primary hover:underline">
           Back to login
         </a>
       </div>

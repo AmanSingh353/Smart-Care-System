@@ -127,7 +127,7 @@ const RegisterPage = () => {
                 
                 <button 
                   type="button"
-                  onClick={() => navigate("/")} 
+                  onClick={() => navigate("/login")} 
                   className="w-full flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
                 >
                   <ArrowLeft className="h-4 w-4" />
@@ -154,7 +154,7 @@ const RegisterPage = () => {
               </div>
 
               <div className="space-y-3 pt-2">
-                <Button onClick={() => navigate("/")} className="w-full h-12 shadow-md">
+                <Button onClick={() => navigate("/login")} className="w-full h-12 shadow-md">
                   Go to Login Dashboard
                 </Button>
                 <Button onClick={() => setRegistered(null)} variant="ghost" className="w-full">

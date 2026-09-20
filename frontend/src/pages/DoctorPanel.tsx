@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Plus, User, Stethoscope } from "lucide-react";
 
 const DoctorPanel = () => {
@@ -62,7 +63,10 @@ const DoctorPanel = () => {
 
   return (
     <StaffLayout allowedRoles={["doctor", "admin"]}>
-      <h2 className="text-xl font-bold text-foreground mb-6">Doctor Panel</h2>
+      <PageHeader
+        title="Doctor Workspace"
+        description="Review admitted patients, update the unified record, prescribe, and request tests."
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-1">

@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import hospitalLogo from "@/assets/hospital-logo.png";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Stethoscope, Users, UserPlus } from "lucide-react";
+import { Stethoscope, Users, UserPlus, ArrowLeft } from "lucide-react";
 import { useAuth, StaffRole } from "@/contexts/AuthContext";
 
 const ROLE_ROUTES: Record<StaffRole, string> = {
@@ -38,12 +38,16 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-canvas px-4 py-10">
+      <div className="w-full max-w-md animate-fade-in">
+        <Link to="/" className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground mb-6">
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to platform
+        </Link>
+
         <div className="text-center mb-8">
-          <img src={hospitalLogo} alt="Hospital Logo" width={72} height={72} className="mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-foreground">30-Second Smart Care System</h1>
-          <p className="text-sm text-muted-foreground mt-1">SCS30 · Connected Hospital MVP</p>
+          <img src={hospitalLogo} alt="Smart Care System" width={64} height={64} className="mx-auto mb-4 rounded-2xl shadow-card" />
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Enter Smart Care</h1>
+          <p className="text-sm text-muted-foreground mt-1">Hospital workspace · role-based access</p>
         </div>
 
         {mode === "choose" && (
@@ -56,10 +60,7 @@ const LoginPage = () => {
               <Users className="h-5 w-5" />
               Login as Family
             </Button>
-            <Button
-              onClick={() => navigate("/register")}
-              className="w-full h-14 text-base gap-3 bg-success hover:bg-success/90 text-success-foreground border-none"
-            >
+            <Button onClick={() => navigate("/register")} className="w-full h-14 text-base gap-3" variant="secondary">
               <UserPlus className="h-5 w-5" />
               New Patient Registration
             </Button>
@@ -67,7 +68,7 @@ const LoginPage = () => {
         )}
 
         {mode === "staff" && (
-          <Card>
+          <Card className="rounded-2xl shadow-card border-border">
             <CardHeader>
               <CardTitle className="text-lg">Staff Login</CardTitle>
             </CardHeader>
@@ -77,7 +78,7 @@ const LoginPage = () => {
                 <select
                   value={staffRole}
                   onChange={e => setStaffRole(e.target.value as StaffRole)}
-                  className="w-full mt-1.5 h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  className="w-full mt-1.5 h-11 rounded-xl border border-input bg-background px-3 text-sm"
                 >
                   <option value="admin">Admin</option>
                   <option value="reception">Reception / Registration</option>
@@ -88,9 +89,7 @@ const LoginPage = () => {
                   <option value="billing">Billing / Finance</option>
                 </select>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Demo mode — no password required. Role controls which screens you can access.
-              </p>
+              <p className="text-xs text-muted-foreground">Demo mode — no password required. Role controls which screens you can access.</p>
               <Button onClick={handleStaffLogin} className="w-full">
                 Enter as {staffRole.charAt(0).toUpperCase() + staffRole.slice(1)}
               </Button>
@@ -106,7 +105,7 @@ const LoginPage = () => {
         )}
 
         {mode === "family" && (
-          <Card>
+          <Card className="rounded-2xl shadow-card border-border">
             <CardHeader>
               <CardTitle className="text-lg">Family Access</CardTitle>
             </CardHeader>
@@ -117,12 +116,11 @@ const LoginPage = () => {
                   placeholder="e.g. SCS-1001"
                   value={patientId}
                   onChange={e => setPatientId(e.target.value)}
-                  className="mt-1.5"
+                  className="mt-1.5 h-11 rounded-xl"
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Try demo IDs: SCS-1001 (under treatment), SCS-1002 (awaiting test), SCS-1004 (registered),
-                SCS-1005 (ready for discharge).
+                Try demo IDs: SCS-1001, SCS-1002, SCS-1004, SCS-1005.
               </p>
               <Button onClick={handleFamilyLogin} className="w-full">
                 Access Patient Info
@@ -137,10 +135,6 @@ const LoginPage = () => {
             </CardContent>
           </Card>
         )}
-
-        <p className="text-center text-xs text-muted-foreground mt-8">
-          Smart Care Hospital © {new Date().getFullYear()}
-        </p>
       </div>
     </div>
   );

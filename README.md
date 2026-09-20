@@ -27,6 +27,10 @@ npm run dev
 
 Runs at [http://localhost:5173](http://localhost:5173).
 
+- `/` — public landing page  
+- `/login` — staff / family entry  
+- `/register` — self registration  
+
 The UI still uses **PatientContext / AuthContext / mockData** and works **without** the backend.
 
 Optional env (see `frontend/.env.example`):

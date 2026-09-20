@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { StaffLayout } from "@/components/StaffLayout";
 import { PatientDetails } from "@/components/PatientDetails";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { usePatients } from "@/contexts/PatientContext";
 import { getBillTotal } from "@/data/mockData";
 import { Button } from "@/components/ui/button";
@@ -28,7 +29,10 @@ const BillingPage = () => {
 
   return (
     <StaffLayout allowedRoles={["billing", "admin"]}>
-      <h2 className="text-xl font-bold text-foreground mb-6">Billing & Payments</h2>
+      <PageHeader
+        title="Billing & Payments"
+        description="Invoices stay in sync with registration, medicines, tests, and room charges."
+      />
 
       <div className="grid grid-cols-2 gap-3 mb-6 max-w-md">
         <Card>

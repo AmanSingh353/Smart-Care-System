@@ -1,8 +1,11 @@
 import { StaffLayout } from "@/components/StaffLayout";
+import { PageHeader } from "@/components/dashboard/PageHeader";
+import { StatCard } from "@/components/dashboard/StatCard";
+import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { CareGuardPanel } from "@/components/patient/CareGuardPanel";
 import { usePatients } from "@/contexts/PatientContext";
 import { getBillTotal, isPatientActive, roomLabel } from "@/data/mockData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Users, Activity, FlaskConical, Pill, Receipt, IndianRupee } from "lucide-react";
 
 const AdminDashboard = () => {
@@ -38,42 +41,30 @@ const AdminDashboard = () => {
     p.requests.filter(r => r.status === "Pending").map(r => ({ patient: p, request: r }))
   );
 
-  const metrics = [
-    { label: "Total patients", value: patients.length, icon: Users, tone: "bg-primary/10 text-primary" },
-    { label: "Admitted / active", value: activePatients.length, icon: Activity, tone: "bg-success/10 text-success" },
-    { label: "Active treatments", value: underTreatment, icon: Activity, tone: "bg-info/10 text-info" },
-    { label: "Pending tests", value: pendingTests, icon: FlaskConical, tone: "bg-warning/10 text-warning" },
-    { label: "Pending medicines", value: pendingMeds, icon: Pill, tone: "bg-warning/10 text-warning" },
-    { label: "Unpaid bills", value: unpaidBills.length, icon: Receipt, tone: "bg-destructive/10 text-destructive" },
-    { label: "Paid bills", value: paidBills.length, icon: Receipt, tone: "bg-success/10 text-success" },
-    { label: "Revenue collected", value: `₹${revenue.toLocaleString("en-IN")}`, icon: IndianRupee, tone: "bg-primary/10 text-primary" },
-  ];
-
   return (
     <StaffLayout allowedRoles={["admin"]}>
-      <h2 className="text-xl font-bold text-foreground mb-2">Admin Dashboard</h2>
-      <p className="text-sm text-muted-foreground mb-6">Hospital overview from live shared patient state</p>
+      <PageHeader
+        title="Hospital Command"
+        description="Live overview derived from the shared patient record across every department."
+      />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        {metrics.map(m => (
-          <Card key={m.label}>
-            <CardContent className="pt-4 flex items-start gap-3">
-              <div className={`h-9 w-9 rounded-md flex items-center justify-center shrink-0 ${m.tone}`}>
-                <m.icon className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground leading-tight">{m.label}</p>
-                <p className="text-lg font-bold text-foreground truncate">{m.value}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
+        <StatCard label="Total patients" value={patients.length} icon={Users} />
+        <StatCard label="Active / admitted" value={activePatients.length} icon={Activity} hint="Not discharged" />
+        <StatCard label="Active treatments" value={underTreatment} icon={Activity} />
+        <StatCard label="Pending tests" value={pendingTests} icon={FlaskConical} />
+        <StatCard label="Pending medicines" value={pendingMeds} icon={Pill} />
+        <StatCard label="Unpaid bills" value={unpaidBills.length} icon={Receipt} />
+        <StatCard label="Paid bills" value={paidBills.length} icon={Receipt} />
+        <StatCard label="Revenue collected" value={`₹${revenue.toLocaleString("en-IN")}`} icon={IndianRupee} />
       </div>
 
+      <CareGuardPanel className="mb-6" />
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        <Card className="lg:col-span-2">
+        <Card className="lg:col-span-2 rounded-2xl shadow-card">
           <CardHeader>
-            <CardTitle className="text-base">Patients</CardTitle>
+            <CardTitle className="text-base font-semibold">Patients</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -96,12 +87,10 @@ const AdminDashboard = () => {
                       <td className="py-3 hidden md:table-cell text-muted-foreground text-xs">{p.assignedDoctor}</td>
                       <td className="py-3 hidden sm:table-cell text-muted-foreground text-xs">{roomLabel(p)}</td>
                       <td className="py-3">
-                        <Badge variant={p.treatmentStatus === "Discharged" ? "outline" : "secondary"} className="text-xs">
-                          {p.treatmentStatus}
-                        </Badge>
+                        <StatusBadge status={p.treatmentStatus} />
                       </td>
                       <td className="py-3 text-right">
-                        <span className="block">₹{getBillTotal(p.billItems).toLocaleString("en-IN")}</span>
+                        <span className="block tabular-nums">₹{getBillTotal(p.billItems).toLocaleString("en-IN")}</span>
                         <span className="text-[10px] text-muted-foreground">{p.billStatus}</span>
                       </td>
                     </tr>
@@ -115,9 +104,9 @@ const AdminDashboard = () => {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="rounded-2xl shadow-card">
           <CardHeader>
-            <CardTitle className="text-base">Recent activity</CardTitle>
+            <CardTitle className="text-base font-semibold">Recent activity</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 max-h-[420px] overflow-y-auto">
             {recentActivity.length === 0 && <p className="text-sm text-muted-foreground">No activity yet</p>}
@@ -134,13 +123,16 @@ const AdminDashboard = () => {
       </div>
 
       {pendingRequests.length > 0 && (
-        <Card>
+        <Card className="rounded-2xl shadow-card">
           <CardHeader>
-            <CardTitle className="text-base">Family requests pending</CardTitle>
+            <CardTitle className="text-base font-semibold">Family requests pending</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             {pendingRequests.map(({ patient, request }) => (
-              <div key={request.id} className="flex flex-wrap items-center justify-between gap-2 text-sm bg-muted/40 rounded-md px-3 py-2">
+              <div
+                key={request.id}
+                className="flex flex-wrap items-center justify-between gap-2 text-sm bg-muted/40 rounded-xl px-3 py-2"
+              >
                 <div>
                   <span className="text-primary font-medium">{patient.id}</span>
                   <span className="ml-2">
@@ -150,14 +142,14 @@ const AdminDashboard = () => {
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    className="text-xs text-success hover:underline"
+                    className="text-xs font-semibold text-success hover:underline"
                     onClick={() => updateFamilyRequestStatus(patient.id, request.id, "Approved")}
                   >
                     Approve
                   </button>
                   <button
                     type="button"
-                    className="text-xs text-destructive hover:underline"
+                    className="text-xs font-semibold text-destructive hover:underline"
                     onClick={() => updateFamilyRequestStatus(patient.id, request.id, "Rejected")}
                   >
                     Reject

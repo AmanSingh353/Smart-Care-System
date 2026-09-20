@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { StaffLayout } from "@/components/StaffLayout";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { usePatients } from "@/contexts/PatientContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,8 +27,10 @@ const LabPage = () => {
 
   return (
     <StaffLayout allowedRoles={["lab", "admin", "doctor"]}>
-      <h2 className="text-xl font-bold text-foreground mb-2">Laboratory</h2>
-      <p className="text-sm text-muted-foreground mb-6">Update test status and publish results to the patient record</p>
+      <PageHeader
+        title="Laboratory"
+        description="Update test status and publish results to the unified patient record and family view."
+      />
 
       <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
         Open requests ({openTests.length})

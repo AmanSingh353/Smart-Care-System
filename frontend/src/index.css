@@ -4,51 +4,57 @@
 
 @layer base {
   :root {
-    --background: 210 33% 98%;
-    --foreground: 210 25% 15%;
+    /* Soft cool off-white canvas */
+    --background: 180 25% 97%;
+    --foreground: 200 25% 12%;
 
     --card: 0 0% 100%;
-    --card-foreground: 210 25% 15%;
+    --card-foreground: 200 25% 12%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 210 25% 15%;
+    --popover-foreground: 200 25% 12%;
 
-    --primary: 207 70% 45%;
+    /* Healthcare teal */
+    --primary: 174 58% 32%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 207 30% 94%;
-    --secondary-foreground: 207 70% 30%;
+    --secondary: 174 30% 94%;
+    --secondary-foreground: 174 45% 22%;
 
-    --muted: 210 20% 96%;
-    --muted-foreground: 210 10% 50%;
+    --muted: 180 16% 95%;
+    --muted-foreground: 200 10% 42%;
 
-    --accent: 170 50% 45%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 168 45% 92%;
+    --accent-foreground: 174 50% 24%;
 
-    --destructive: 0 65% 55%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 210 20% 90%;
-    --input: 210 20% 90%;
-    --ring: 207 70% 45%;
+    --border: 180 14% 88%;
+    --input: 180 14% 88%;
+    --ring: 174 58% 32%;
 
-    --radius: 0.625rem;
+    --radius: 1rem;
 
-    --sidebar-background: 207 40% 18%;
-    --sidebar-foreground: 210 20% 92%;
-    --sidebar-primary: 207 70% 55%;
+    /* Light sidebar (premium SaaS) */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 200 15% 28%;
+    --sidebar-primary: 174 58% 32%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 207 35% 25%;
-    --sidebar-accent-foreground: 210 20% 95%;
-    --sidebar-border: 207 30% 25%;
-    --sidebar-ring: 207 70% 55%;
+    --sidebar-accent: 174 35% 95%;
+    --sidebar-accent-foreground: 174 50% 22%;
+    --sidebar-border: 180 14% 90%;
+    --sidebar-ring: 174 58% 32%;
 
-    --success: 145 60% 42%;
+    --success: 152 55% 36%;
     --success-foreground: 0 0% 100%;
-    --warning: 38 90% 55%;
-    --warning-foreground: 0 0% 100%;
-    --info: 207 70% 55%;
+    --warning: 38 92% 48%;
+    --warning-foreground: 200 25% 12%;
+    --info: 199 80% 42%;
     --info-foreground: 0 0% 100%;
+
+    --surface-elevated: 0 0% 100%;
+    --shadow-soft: 174 30% 20%;
   }
 }
 
@@ -56,8 +62,47 @@
   * {
     @apply border-border;
   }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: "Plus Jakarta Sans", "DM Sans", system-ui, sans-serif;
+    font-feature-settings: "ss01" on, "cv11" on;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: "Plus Jakarta Sans", "DM Sans", system-ui, sans-serif;
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .shadow-soft {
+    box-shadow: 0 8px 30px -12px hsl(var(--shadow-soft) / 0.18);
+  }
+
+  .shadow-card {
+    box-shadow: 0 1px 2px hsl(var(--shadow-soft) / 0.04), 0 8px 24px -10px hsl(var(--shadow-soft) / 0.12);
+  }
+
+  .bg-canvas {
+    background:
+      radial-gradient(1200px 600px at 10% -10%, hsl(174 50% 92% / 0.7), transparent 55%),
+      radial-gradient(900px 500px at 90% 0%, hsl(180 40% 94% / 0.8), transparent 50%),
+      hsl(var(--background));
+  }
+
+  .glass-panel {
+    @apply bg-card/80 backdrop-blur-md border border-border/80 shadow-card;
   }
 }

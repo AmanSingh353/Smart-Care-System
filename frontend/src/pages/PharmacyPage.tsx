@@ -1,4 +1,5 @@
 import { StaffLayout } from "@/components/StaffLayout";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { usePatients } from "@/contexts/PatientContext";
 import { isPatientActive } from "@/data/mockData";
 import { Button } from "@/components/ui/button";
@@ -40,8 +41,10 @@ const PharmacyPage = () => {
 
   return (
     <StaffLayout allowedRoles={["pharmacy", "admin"]}>
-      <h2 className="text-xl font-bold text-foreground mb-2">Pharmacy</h2>
-      <p className="text-sm text-muted-foreground mb-6">Prescriptions from doctors appear here in real time</p>
+      <PageHeader
+        title="Pharmacy"
+        description="Prescriptions from doctors appear here in real time for packing and collection."
+      />
 
       <Tabs defaultValue="pending">
         <TabsList>
