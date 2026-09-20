@@ -9,6 +9,7 @@ import { isPatientActive } from "@/data/mockData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Pill } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/dashboard/EmptyState";
 
 const PharmacyPage = () => {
   const { patients, getPatientById } = usePatients();
@@ -72,9 +73,12 @@ const PharmacyPage = () => {
             <PatientWorkspace patient={selected} role="pharmacy" defaultTab="medications" />
           ) : (
             <Card className="rounded-2xl shadow-card">
-              <CardContent className="py-16 text-center">
-                <Pill className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
-                <p className="text-muted-foreground">Select a prescription queue item</p>
+              <CardContent className="py-12">
+                <EmptyState
+                  icon={Pill}
+                  title="No prescriptions pending"
+                  description="When a doctor creates a prescription, it appears here on the shared patient record for dispensing."
+                />
               </CardContent>
             </Card>
           )}

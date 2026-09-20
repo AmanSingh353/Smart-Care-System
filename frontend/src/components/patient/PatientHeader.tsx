@@ -21,7 +21,7 @@ export function PatientHeader({ patient, actions, className, familyMode = false 
       )}
     >
       <div className="flex flex-col lg:flex-row lg:items-start gap-4">
-        <div className="h-12 w-12 rounded-2xl bg-primary/15 text-primary flex items-center justify-center shrink-0">
+        <div className="h-12 w-12 rounded-2xl bg-primary/15 text-primary flex items-center justify-center shrink-0" aria-hidden>
           <User className="h-6 w-6" />
         </div>
         <div className="min-w-0 flex-1 space-y-2">

@@ -136,8 +136,8 @@ export const StaffLayout = ({ children, allowedRoles }: { children: ReactNode; a
         <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border">
           <img src={hospitalLogo} alt="Smart Care System" width={36} height={36} className="rounded-lg" />
           <div className="min-w-0">
-            <h1 className="text-sm font-bold text-foreground leading-tight truncate">Smart Care</h1>
-            <p className="text-[11px] text-muted-foreground">SCS30 Platform</p>
+            <h1 className="text-sm font-bold text-foreground leading-tight truncate">Smart Care System</h1>
+            <p className="text-[11px] text-muted-foreground">Connected hospital care</p>
           </div>
         </div>
 
@@ -176,7 +176,7 @@ export const StaffLayout = ({ children, allowedRoles }: { children: ReactNode; a
               {ROLE_LABELS[role]} workspace
             </p>
             <p className="hidden lg:block text-sm text-muted-foreground">
-              Unified patient care · live hospital coordination
+              Smart Care System · unified patient care
             </p>
           </div>
 

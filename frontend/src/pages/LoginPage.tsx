@@ -46,8 +46,8 @@ const LoginPage = () => {
 
         <div className="text-center mb-8">
           <img src={hospitalLogo} alt="Smart Care System" width={64} height={64} className="mx-auto mb-4 rounded-2xl shadow-card" />
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Enter Smart Care</h1>
-          <p className="text-sm text-muted-foreground mt-1">Hospital workspace · role-based access</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Smart Care System</h1>
+          <p className="text-sm text-muted-foreground mt-1">Enter your hospital workspace</p>
         </div>
 
         {mode === "choose" && (

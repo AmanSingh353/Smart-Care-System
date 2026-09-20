@@ -7,6 +7,7 @@ import { CareGuardPanel } from "@/components/patient/CareGuardPanel";
 import { usePatients } from "@/contexts/PatientContext";
 import { isPatientActive } from "@/data/mockData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/dashboard/EmptyState";
 import { User, Stethoscope } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,7 +29,7 @@ const DoctorPanel = () => {
     <StaffLayout allowedRoles={["doctor", "admin"]}>
       <PageHeader
         title="Doctor Workspace"
-        description="Open a patient to update the unified record — CareGuard surfaces what needs review."
+        description="Review patients, clinical data, and CareGuard signals — then act on the shared record."
       />
 
       <CareGuardPanel roleMode className="mb-6" compact />
@@ -71,9 +72,12 @@ const DoctorPanel = () => {
             <PatientWorkspace patient={selected} role="doctor" defaultTab={defaultTab} />
           ) : (
             <Card className="rounded-2xl shadow-card">
-              <CardContent className="py-16 text-center">
-                <Stethoscope className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
-                <p className="text-muted-foreground">Select a patient to open the unified Patient Workspace</p>
+              <CardContent className="py-12">
+                <EmptyState
+                  icon={Stethoscope}
+                  title="Select a patient to begin"
+                  description="Open a patient from the list to review the journey, clinical summary, CareGuard signals, tests, and prescriptions."
+                />
               </CardContent>
             </Card>
           )}

@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Receipt, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/dashboard/EmptyState";
 
 const BillingPage = () => {
   const { patients, getPatientById } = usePatients();
@@ -105,9 +106,12 @@ const BillingPage = () => {
             <PatientWorkspace patient={selected} role="billing" defaultTab="billing" />
           ) : (
             <Card className="rounded-2xl shadow-card">
-              <CardContent className="py-16 text-center">
-                <Receipt className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
-                <p className="text-muted-foreground">Select a patient to open billing in their workspace</p>
+              <CardContent className="py-12">
+                <EmptyState
+                  icon={Receipt}
+                  title="Select a patient bill"
+                  description="Open a patient to review charges, payment status, and discharge billing on the shared record."
+                />
               </CardContent>
             </Card>
           )}

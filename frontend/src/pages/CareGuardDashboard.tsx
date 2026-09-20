@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Shield, AlertTriangle, ClipboardCheck, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/dashboard/EmptyState";
 
 const CareGuardDashboard = () => {
   const { summary, getRoleSignals, openSignals, resetDemoSignals } = useCareGuard();
@@ -27,7 +28,7 @@ const CareGuardDashboard = () => {
     <StaffLayout allowedRoles={["admin", "doctor", "nurse", "lab", "pharmacy", "billing"]}>
       <PageHeader
         title="CareGuard"
-        description="Attention signals across Smart Care System — human review required."
+        description="Helps identify what needs attention next across Smart Care System — every signal requires human review."
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
@@ -80,8 +81,12 @@ const CareGuardDashboard = () => {
 
       {priority.length === 0 ? (
         <Card className="rounded-2xl shadow-card">
-          <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            CareGuard found no active workflow or safety signals.
+          <CardContent className="py-4">
+            <EmptyState
+              icon={CheckCircle2}
+              title="No active CareGuard signals"
+              description="All current workflow items are up to date. When a lab result needs review or a discharge is blocked, it will appear here."
+            />
           </CardContent>
         </Card>
       ) : (

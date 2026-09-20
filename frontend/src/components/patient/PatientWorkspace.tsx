@@ -137,23 +137,24 @@ export function PatientWorkspace({ patient, role: roleProp, className, defaultTa
       <PatientHeader patient={patient} actions={headerActions} familyMode={familyMode} />
 
       {/* Secondary nav */}
-      <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1">
+      <nav className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-thin" aria-label="Patient workspace sections">
         {tabs.map(t => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
+            aria-current={tab === t.id ? "page" : undefined}
             className={cn(
-              "shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold border transition-colors",
+              "shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               tab === t.id
                 ? "bg-primary text-primary-foreground border-primary"
-                : "bg-card text-muted-foreground border-border hover:bg-muted"
+                : "bg-card text-muted-foreground border-border hover:bg-muted hover:text-foreground"
             )}
           >
             {t.label}
           </button>
         ))}
-      </div>
+      </nav>
 
       {(tab === "overview" || tab === "journey") && (
         <>

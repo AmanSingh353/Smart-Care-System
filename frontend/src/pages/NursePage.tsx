@@ -9,6 +9,7 @@ import { isPatientActive, roomLabel } from "@/data/mockData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle, Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/dashboard/EmptyState";
 
 const NursePage = () => {
   const { patients, getPatientById } = usePatients();
@@ -91,9 +92,12 @@ const NursePage = () => {
             <PatientWorkspace patient={selected} role="nurse" defaultTab="medications" />
           ) : (
             <Card className="rounded-2xl shadow-card">
-              <CardContent className="py-16 text-center text-muted-foreground">
-                <Heart className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                Select a patient to open their workspace
+              <CardContent className="py-12">
+                <EmptyState
+                  icon={Heart}
+                  title="Select a patient for care tasks"
+                  description="Open a patient to complete medication schedules, post nursing updates, and advance treatment status."
+                />
               </CardContent>
             </Card>
           )}

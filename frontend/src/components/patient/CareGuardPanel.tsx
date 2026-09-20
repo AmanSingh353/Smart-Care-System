@@ -1,7 +1,8 @@
 import { CareGuardSignal, CareGuardSeverity } from "@/careguard/types";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/dashboard/EmptyState";
 import { cn } from "@/lib/utils";
-import { Shield, AlertTriangle, Info, Flame } from "lucide-react";
+import { Shield, AlertTriangle, Info, Flame, CheckCircle2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useCareGuard } from "@/contexts/CareGuardContext";
 
@@ -20,7 +21,7 @@ const severityStyles: Record<
     icon: AlertTriangle,
   },
   HIGH: {
-    badge: "bg-orange-500/15 text-orange-800 border-orange-500/30",
+    badge: "bg-orange-500/15 text-orange-900 border-orange-500/30",
     border: "border-orange-500/40",
     icon: AlertTriangle,
   },
@@ -45,7 +46,13 @@ export function CareGuardSignalCard({
   const Icon = style.icon;
 
   return (
-    <div className={cn("rounded-2xl border bg-card p-4 shadow-card", style.border)}>
+    <article
+      className={cn(
+        "rounded-2xl border bg-card p-4 shadow-card transition-shadow hover:shadow-soft",
+        style.border
+      )}
+      aria-label={`${signal.severity}: ${signal.title}`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
         <span
           className={cn(
@@ -53,10 +60,10 @@ export function CareGuardSignalCard({
             style.badge
           )}
         >
-          <Icon className="h-3 w-3" />
+          <Icon className="h-3 w-3" aria-hidden />
           {signal.severity}
         </span>
-        <span className="text-[10px] font-semibold uppercase text-muted-foreground">
+        <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide">
           {signal.status}
         </span>
       </div>
@@ -74,24 +81,24 @@ export function CareGuardSignalCard({
         </p>
       )}
 
-      <div className={cn("grid gap-1.5 mt-3 text-xs", compact ? "" : "sm:grid-cols-2")}>
+      <dl className={cn("grid gap-1.5 mt-3 text-xs", compact ? "" : "sm:grid-cols-2")}>
         <div>
-          <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Why</p>
-          <p className="text-foreground/90">{signal.why}</p>
+          <dt className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Why</dt>
+          <dd className="text-foreground/90">{signal.why}</dd>
         </div>
         <div>
-          <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Source</p>
-          <p className="text-foreground/90">{signal.source}</p>
+          <dt className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Source</dt>
+          <dd className="text-foreground/90">{signal.source}</dd>
         </div>
         <div>
-          <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Assigned to</p>
-          <p className="font-semibold text-foreground">{signal.responsibleRole}</p>
+          <dt className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Assigned to</dt>
+          <dd className="font-semibold text-foreground">{signal.responsibleRole}</dd>
         </div>
         <div>
-          <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Action</p>
-          <p className="text-foreground/90">{signal.actionLabel}</p>
+          <dt className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Action</dt>
+          <dd className="text-foreground/90">{signal.actionLabel}</dd>
         </div>
-      </div>
+      </dl>
 
       <div className="flex flex-wrap gap-2 mt-3">
         <Button asChild size="sm">
@@ -110,7 +117,7 @@ export function CareGuardSignalCard({
       <p className="text-[10px] text-muted-foreground mt-2">
         Created {new Date(signal.createdAt).toLocaleString("en-IN")}
       </p>
-    </div>
+    </article>
   );
 }
 
@@ -118,12 +125,11 @@ interface CareGuardPanelProps {
   patientId?: string;
   className?: string;
   compact?: boolean;
-  /** When true, show role-filtered hospital signals instead of patient-scoped */
   roleMode?: boolean;
 }
 
 /**
- * Live CareGuard panel — workflow & safety signals requiring human review.
+ * CareGuard panel — workflow & safety signals requiring human review.
  */
 export function CareGuardPanel({ patientId, className, compact = false, roleMode = false }: CareGuardPanelProps) {
   const { getPatientSignals, getRoleSignals, openSignals } = useCareGuard();
@@ -135,28 +141,41 @@ export function CareGuardPanel({ patientId, className, compact = false, roleMode
       : openSignals;
 
   return (
-    <div
+    <section
       className={cn(
-        "rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.05] to-card p-4 md:p-5 shadow-card",
+        "rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/[0.07] via-card to-card p-4 md:p-5 shadow-card",
         className
       )}
+      aria-labelledby="careguard-panel-title"
     >
-      <div className="flex items-start gap-3 mb-4">
-        <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-          <Shield className="h-5 w-5" />
+      <div className="flex items-start gap-3 mb-1">
+        <div className="h-10 w-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center shrink-0 ring-1 ring-primary/20">
+          <Shield className="h-5 w-5" aria-hidden />
         </div>
-        <div className="min-w-0">
-          <h3 className="text-sm font-bold tracking-tight text-foreground">CareGuard</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">Care workflow intelligence</p>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 id="careguard-panel-title" className="text-sm font-bold tracking-tight text-foreground">
+              CareGuard
+            </h3>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+              USP
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+            Helps identify what needs attention next — human review required.
+          </p>
         </div>
       </div>
 
       {signals.length === 0 ? (
-        <p className="text-sm text-muted-foreground rounded-xl border border-dashed border-border bg-muted/30 px-3 py-4 text-center">
-          CareGuard found no active workflow or safety signals.
-        </p>
+        <EmptyState
+          icon={CheckCircle2}
+          title="No active CareGuard signals"
+          description="All current workflow items are up to date. CareGuard will surface attention items when labs, meds, or discharge steps need review."
+          className="py-8 mt-2 rounded-xl border border-dashed border-border/80 bg-muted/20"
+        />
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3 mt-4">
           {signals.map(s => (
             <CareGuardSignalCard
               key={s.id}
@@ -167,7 +186,7 @@ export function CareGuardPanel({ patientId, className, compact = false, roleMode
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 

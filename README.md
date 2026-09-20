@@ -130,4 +130,4 @@ Closing line:
 - Do not commit secrets — use `.env.example` templates.  
 - Core demo does **not** depend on external AI APIs.  
 - CareGuard outputs are **review signals**, not diagnoses or autonomous orders.  
-- Readiness details: `FINAL_READINESS_REPORT.md`
+- Readiness: `FINAL_READINESS_REPORT.md` · Demo script: `FINAL_DEMO_RUNBOOK.md` · Polish: `PHASE_6_REPORT.md`

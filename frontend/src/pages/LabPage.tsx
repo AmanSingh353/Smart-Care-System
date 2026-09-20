@@ -6,9 +6,10 @@ import { PatientWorkspace } from "@/components/patient/PatientWorkspace";
 import { CareGuardPanel } from "@/components/patient/CareGuardPanel";
 import { usePatients } from "@/contexts/PatientContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { EmptyState } from "@/components/dashboard/EmptyState";
 import { FlaskConical } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { StatusBadge } from "@/components/dashboard/StatusBadge";
 
 const LabPage = () => {
   const { patients, getPatientById } = usePatients();
@@ -81,9 +82,12 @@ const LabPage = () => {
             <PatientWorkspace patient={selected} role="lab" defaultTab="tests" />
           ) : (
             <Card className="rounded-2xl shadow-card">
-              <CardContent className="py-16 text-center">
-                <FlaskConical className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
-                <p className="text-muted-foreground">No lab work selected</p>
+              <CardContent className="py-12">
+                <EmptyState
+                  icon={FlaskConical}
+                  title="No lab work selected"
+                  description="When doctors order tests, they appear here on the same patient record. Select a patient with open tests to enter results."
+                />
               </CardContent>
             </Card>
           )}

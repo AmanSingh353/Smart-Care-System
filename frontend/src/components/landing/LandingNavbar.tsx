@@ -37,7 +37,7 @@ export function LandingNavbar() {
 
         <div className="hidden sm:flex items-center gap-2">
           <Button asChild variant="outline" size="sm">
-            <Link to="/login">Enter Hospital</Link>
+            <Link to="/login">Enter Smart Care System</Link>
           </Button>
         </div>
 
@@ -65,7 +65,7 @@ export function LandingNavbar() {
           ))}
           <Button asChild className="w-full mt-2">
             <Link to="/login" onClick={() => setOpen(false)}>
-              Enter Hospital <ArrowRight className="h-4 w-4" />
+              Enter Smart Care System <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
         </div>

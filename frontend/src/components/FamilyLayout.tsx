@@ -22,8 +22,8 @@ export const FamilyLayout = ({ children }: { children: ReactNode }) => {
           <div className="flex items-center gap-2.5 min-w-0">
             <img src={hospitalLogo} alt="Smart Care System" width={28} height={28} className="rounded-md" />
             <div className="min-w-0">
-              <span className="text-sm font-bold text-foreground block leading-tight truncate">Family Care View</span>
-              <span className="text-[10px] text-muted-foreground">Live updates from the hospital</span>
+              <span className="text-sm font-bold text-foreground block leading-tight truncate">Smart Care System</span>
+              <span className="text-[10px] text-muted-foreground">Family care view</span>
             </div>
           </div>
           <Link

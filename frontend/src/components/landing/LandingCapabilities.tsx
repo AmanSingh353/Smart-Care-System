@@ -25,8 +25,8 @@ const capabilities = [
   },
   {
     icon: Brain,
-    title: "AI Hospital Intelligence",
-    desc: "A foundation for CareGuard insights that turn operations data into action.",
+    title: "CareGuard intelligence",
+    desc: "Surfaces what needs attention next — explainable signals for the right role to review.",
   },
   {
     icon: Users,
