@@ -9,8 +9,10 @@ Connected hospital care through **one unified patient record**.
 Smart-Care-System/
 ├── frontend/          # React + Vite + TypeScript + Tailwind
 ├── backend/           # Express + TypeScript + Socket.io
+├── DEMO_CREDENTIALS.md
 ├── FINAL_DEMO_RUNBOOK.md
-├── FINAL_READINESS_REPORT.md
+├── FINAL_PRESENTATION_CHECKLIST.md
+├── FINAL_RELEASE_REPORT.md
 └── README.md
 ```
 
@@ -19,17 +21,21 @@ Smart-Care-System/
 - Node.js 18+
 - npm
 
-## Quick start (demo)
+---
+
+## Local development
 
 ```bash
 # Terminal 1 — API + Socket.io
 cd backend
 npm install
+cp .env.example .env   # Windows: copy .env.example .env
 npm run dev
 
 # Terminal 2 — UI
 cd frontend
 npm install
+cp .env.example .env
 npm run dev
 ```
 
@@ -41,60 +47,83 @@ npm run dev
 
 The UI works **offline** (PatientContext + local CareGuard). With the backend running you also get CareGuard API sync and Socket.io live events.
 
+---
+
 ## Environment variables
 
-### Frontend (`frontend/.env`)
+### Frontend (`frontend/.env` — from `.env.example`)
 
-```env
-VITE_API_URL=http://localhost:5000
-VITE_DEMO_MODE=true
+| Variable | Purpose |
+|----------|---------|
+| `VITE_API_URL` | Backend base URL (no trailing slash) |
+| `VITE_DEMO_MODE` | `true` for deterministic demo |
+| `VITE_CAREGUARD_LAB_DELAY_MINUTES` | Optional lab delay threshold |
+| `VITE_CAREGUARD_TREATMENT_GRACE_MINUTES` | Optional overdue grace |
+
+### Backend (`backend/.env` — from `.env.example`)
+
+| Variable | Purpose |
+|----------|---------|
+| `PORT` | API port (default `5000`) |
+| `CLIENT_URL` | Frontend origin for CORS + Socket.io |
+| `MONGODB_URI` | Optional; leave empty for demo |
+| `NODE_ENV` | `development` / `production` |
+| `CAREGUARD_LAB_DELAY_MINUTES` | Optional |
+| `CAREGUARD_TREATMENT_GRACE_MINUTES` | Optional |
+
+**Never commit `.env` files.** Templates only: `*.env.example`.
+
+---
+
+## Production
+
+### Build
+
+```bash
+# Frontend
+cd frontend
+npm install
+npm run build
+# Output: frontend/dist
+# Preview locally: npm run preview
+
+# Backend
+cd backend
+npm install
+npm run build
+# Output: backend/dist
+npm start   # node dist/server.js
 ```
 
-See `frontend/.env.example`.
+### Runtime relationship
 
-### Backend (`backend/.env`)
+1. Set `CLIENT_URL` on the backend to the deployed frontend origin.  
+2. Set `VITE_API_URL` at **frontend build time** to the deployed API URL.  
+3. Health check: `GET {API}/api/health` → `{ "status": "ok", "service": "Smart Care System" }`.  
+4. SPA hosts: use `frontend/public/_redirects` (Netlify) or `frontend/vercel.json` for client-side route fallback.
 
-```env
-PORT=5000
-CLIENT_URL=http://localhost:5173
-MONGODB_URI=
-```
+MongoDB is **not required** for the NexaHack demo.
 
-MongoDB is **not required** for the demo. See `backend/.env.example`.
+---
 
-## Demo credentials
+## Demo access
 
-| Role | How to enter |
-|------|----------------|
-| Admin / Doctor / Nurse / Lab / Pharmacy / Billing / Reception | Login → **Hospital Staff** → select role (no password) |
-| Family | Login → **Family** → Patient ID (from Reception registration) |
+See **[DEMO_CREDENTIALS.md](./DEMO_CREDENTIALS.md)**.
 
-### Canonical 5-minute patient
+- Staff: Login → select role (no password in DEMO MODE)  
+- Family: Patient ID from Reception  
+- Canonical live patient: **Arjun Verma** (Fill button on Reception)  
+- Admin → **Reset Demo Data**
 
-1. Login as **Reception**  
-2. Click **Fill canonical demo patient** → **Arjun Verma**  
-3. Register → note the new `SCS-####` ID  
-4. Follow `FINAL_DEMO_RUNBOOK.md`
+## 5-minute demo
 
-Supporting CareGuard scenarios (seed): `SCS-1001` … `SCS-1007` (lab review, pharmacy, overdue task, allergy review, critical lab, discharge block).
-
-## Reset demo data
-
-1. Login as **Admin**  
-2. Use the **DEMO MODE** banner → **Reset demo data**  
-   (or CareGuard page / Admin summary)  
-
-This restores **fictional** patients, workflows, and CareGuard signals only. It does **not** delete a production database.
-
-## 5-minute demo flow
-
-See **[FINAL_DEMO_RUNBOOK.md](./FINAL_DEMO_RUNBOOK.md)** for the exact judge script:
-
-Registration → Doctor → Lab → **CareGuard** → Review → Pharmacy → Family → Admin
+See **[FINAL_DEMO_RUNBOOK.md](./FINAL_DEMO_RUNBOOK.md)** and **[FINAL_PRESENTATION_CHECKLIST.md](./FINAL_PRESENTATION_CHECKLIST.md)**.
 
 Closing line:
 
 > Smart Care System connects the entire hospital through one patient record, while CareGuard helps the team identify what needs attention next.
+
+---
 
 ## Scripts
 
@@ -102,6 +131,7 @@ Closing line:
 |---------|---------|---------|
 | frontend | `npm run dev` | Vite |
 | frontend | `npm run build` | Production build |
+| frontend | `npm run preview` | Serve `dist` |
 | frontend | `npm run lint` | ESLint |
 | frontend | `npm test` | Vitest |
 | backend | `npm run dev` | API + Socket.io |
@@ -125,9 +155,6 @@ Closing line:
 | Admin | `/admin` |
 | Family | `/family/:patientId` |
 
-## Notes
+## Freeze note
 
-- Do not commit secrets — use `.env.example` templates.  
-- Core demo does **not** depend on external AI APIs.  
-- CareGuard outputs are **review signals**, not diagnoses or autonomous orders.  
-- Readiness: `FINAL_READINESS_REPORT.md` · Demo script: `FINAL_DEMO_RUNBOOK.md` · Polish: `PHASE_6_REPORT.md`
+After the NexaHack final lock: **do not add features** unless a critical demo-breaking bug appears. Prefer reliability over new functionality.

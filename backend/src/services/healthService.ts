@@ -4,7 +4,7 @@ export const healthService = {
   getStatus() {
     return {
       status: "ok",
-      service: "scs30-backend",
+      service: "Smart Care System",
       timestamp: new Date().toISOString(),
     };
   },

@@ -61,11 +61,18 @@ const CareGuardDashboard = () => {
                 size="sm"
                 variant="outline"
                 onClick={() => {
+                  if (
+                    !window.confirm(
+                      "Reset DEMO DATA only?\n\nThis restores fictional patients, workflows, and CareGuard signals. It does not touch any production database."
+                    )
+                  ) {
+                    return;
+                  }
                   resetDemoData();
                   setTimeout(() => resetDemoSignals(), 50);
                 }}
               >
-                Reset CareGuard demo
+                Reset Demo Data
               </Button>
             </div>
           </CardContent>

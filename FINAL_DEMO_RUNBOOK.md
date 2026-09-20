@@ -23,137 +23,134 @@ npm run dev
 ```
 
 - Frontend: http://localhost:5173  
-- Backend health: http://localhost:5000/api/health  
+- Health: http://localhost:5000/api/health  
 
-### Optional prep
+### Prep (once)
 
-1. Login as **Admin** → click **Reset demo data** (banner or CareGuard page).  
-2. Confirm DEMO MODE strip shows (top of staff pages).
+1. Login as **Admin** → **Reset Demo Data** (confirm).  
+2. Confirm DEMO MODE banner is visible.
 
-### Credentials
+### Access
 
-| Who | How |
-|-----|-----|
-| Staff | Login → Hospital Staff → pick role (no password) |
-| Family | Login → Family → Patient ID from registration |
+See `DEMO_CREDENTIALS.md` — role-select staff login; Family uses Patient ID.
 
 ---
 
-## STEP 1 — Enter Smart Care System (≈ 30s)
+## 0:00 — PRODUCT INTRO
 
-1. Open `/` landing page.  
-2. Point out: **unified hospital record** + **CareGuard** mention.  
-3. Click **Enter** / go to `/login`.
+Open `/` landing page.
 
 **Say:**  
-“Smart Care System connects the hospital through one patient record. CareGuard is the intelligence layer that surfaces what needs attention next.”
+“Smart Care System connects the hospital around one unified patient record.”
+
+Briefly point to: 30-second registration · real-time coordination · **CareGuard**.
+
+Do not linger on the landing page.
 
 ---
 
-## STEP 2 — 30-second registration (≈ 40s)
+## 0:30 — REGISTRATION
 
-1. Staff login as **Reception**.  
-2. Click **Fill canonical demo patient** → **Arjun Verma**.  
-3. Submit **Register Patient**.  
-4. Show generated **Patient ID** (e.g. `SCS-1008`).  
-5. Optionally **Open Patient Workspace**.
+1. Login → **Reception**.  
+2. **Fill canonical demo patient** → **Arjun Verma**.  
+3. Register → show Patient ID (`SCS-####`).  
 
 **Say:**  
 “In under 30 seconds we created a live hospital record — every department will see this same patient.”
 
-**Note the Patient ID** — use it for Family at the end.
+**Note the Patient ID** for Family.
 
 ---
 
-## STEP 3 — Doctor workspace (≈ 40s)
+## 1:00 — DOCTOR
 
-1. Logout → login as **Doctor**.  
-2. Select **Arjun Verma** (same ID).  
-3. Show **Patient Header**, **Patient Journey**, **Clinical Summary**.  
-4. Update diagnosis briefly (optional).  
-5. **Order test** → e.g. `CBC`.
+1. Login → **Doctor**.  
+2. Open **Arjun Verma**.  
+3. Show Patient Header · Patient Journey · Clinical Summary.  
 
 **Say:**  
-“This is the unified Patient Workspace — journey, clinical data, and actions in one place.”
+“Every department works from this same record.”
 
 ---
 
-## STEP 4 — Lab (≈ 40s)
+## 1:45 — LAB
 
-1. Logout → login as **Lab**.  
-2. Open the same patient / same CBC order.  
-3. Enter a result → **Mark completed & publish**.
+1. Doctor: **Order test** → e.g. `CBC`.  
+2. Login → **Lab**.  
+3. Same patient · same test → enter result → **Mark completed & publish**.  
 
 **Say:**  
 “Lab is not a separate spreadsheet — it’s the same patient record.”
 
 ---
 
-## STEP 5 — CareGuard (≈ 60s) ★ USP
+## 2:15 — CAREGUARD USP ★
 
-1. Login as **Doctor** (or open **CareGuard** from Admin).  
-2. Show signal: **Lab result awaiting review** (`LAB_REVIEW_PENDING`).  
-3. Open Patient Workspace CareGuard panel **or** click **Review result**.  
-4. **Mark reviewed**.  
-5. Show signal → **RESOLVED**.  
-6. Optional: Admin CareGuard summary counts update.
+1. Login → **Doctor** (or open CareGuard).  
+2. Show signal: **Lab result awaiting review**.  
 
 **Say:**  
-“Instead of only storing the result, CareGuard identifies that a doctor still needs to review it — then clears when the human acts.”
+“Traditional systems can store this result. Smart Care System also watches the workflow and identifies that this result still requires attention.”
 
-### Secondary CareGuard (optional 20s)
+3. Click **Review result** → **Mark reviewed**.  
+4. Show CareGuard signal → **RESOLVED**.  
 
-1. Doctor opens **SCS-1005** (Vikram Joshi).  
-2. Show **Medication requires safety review** (allergy overlap).  
-3. Emphasize: review signal only — no auto-substitution.
+This is the **main differentiation moment**.
+
+*Optional 15s:* open **SCS-1005** for allergy / prescription review (HIGH, human review only).
 
 ---
 
-## STEP 6 — Pharmacy (≈ 40s)
+## 3:00 — PHARMACY
 
-1. Doctor: **Prescribe** e.g. `Paracetamol 500 mg`.  
-2. Login as **Pharmacy**.  
-3. Same patient → same Rx → **Mark packed / dispensed**.
+1. Doctor: **Prescribe** e.g. Paracetamol.  
+2. Login → **Pharmacy**.  
+3. Same Rx → dispense.  
+4. Show patient record updated.
+
+---
+
+## 3:30 — FAMILY
+
+1. Login → **Family** with the registration Patient ID.  
+2. Show status · journey · meds · billing · updates.  
+3. Confirm **no internal CareGuard alerts**.
 
 **Say:**  
-“Prescription and dispensing stay on one shared record.”
+“Families see progress — not operational alerts.”
 
 ---
 
-## STEP 7 — Family (≈ 30s)
+## 4:00 — ADMIN
 
-1. Login as **Family** with the **registration Patient ID**.  
-2. Show journey / meds / billing / care updates.  
-3. Confirm **no internal CareGuard severity** panels.
+1. Login → **Admin**.  
+2. Show overview · patient flow · CareGuard summary.  
 
 **Say:**  
-“Families see progress and updates — not operational alerts.”
+“Management sees the same connected ecosystem.”
 
 ---
 
-## STEP 8 — Admin close (≈ 30s)
+## 4:30 — FINAL CAREGUARD MOMENT
 
-1. Login as **Admin**.  
-2. Show: patients, pending tests/meds, billing, **CareGuard summary**.  
-3. Open the canonical patient journey if time allows.
+Open `/careguard`.
 
----
-
-## Closing line
-
-> “Smart Care System connects the entire hospital through one patient record, while CareGuard helps the team identify what needs attention next.”
+**Say:**  
+“CareGuard turns hospital events into actionable attention signals and routes them to the responsible human.”
 
 ---
 
-## If something looks wrong
+## 4:45 — CLOSE
 
-1. Admin → **Reset demo data**.  
+> Smart Care System doesn’t just store hospital information.  
+> It connects the patient’s entire care journey,  
+> and CareGuard helps the team know what needs attention next.
+
+---
+
+## If something breaks
+
+1. Admin → **Reset Demo Data**.  
 2. Hard refresh once.  
-3. Confirm backend `/api/health` if live link badge is offline (demo still works offline via PatientContext).
-
-## Do not
-
-- Invent clinical advice  
-- Claim medically validated AI  
-- Depend on external AI APIs for the core loop  
-- Register random patients mid-demo without resetting first  
+3. Continue from Registration.  
+4. Backend optional for core demo (PatientContext + local CareGuard still work).

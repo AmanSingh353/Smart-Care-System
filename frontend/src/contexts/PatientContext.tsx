@@ -29,6 +29,7 @@ import {
 } from "@/config/demo";
 import { ensureDemoSeedVersion, resetAllDemoLocalState } from "@/config/demoReset";
 import { careguardService } from "@/services/careguardService";
+import { api } from "@/services/api";
 
 function loadPatients(): Patient[] {
   ensureDemoSeedVersion();
@@ -460,8 +461,8 @@ export const PatientProvider = ({ children }: { children: ReactNode }) => {
   const resetDemoData = () => {
     const next = resetAllDemoLocalState();
     setAllPatients(next);
-    // Clear backend CareGuard memory if API is up (demo only)
-    void fetch(`${(import.meta.env.VITE_API_URL as string) || "http://localhost:5000"}/api/careguard/reset-demo`, {
+    // Clear backend CareGuard memory if API is up (demo only — never touches a production DB)
+    void fetch(`${api.baseUrl.replace(/\/$/, "")}/api/careguard/reset-demo`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

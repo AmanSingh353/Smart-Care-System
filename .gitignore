@@ -37,3 +37,8 @@ lerna-debug.log*
 # Misc
 *.local
 coverage/
+
+# Backups / archives (keep outside git)
+*.zip
+backups/
+
