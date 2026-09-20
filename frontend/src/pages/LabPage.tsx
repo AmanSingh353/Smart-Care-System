@@ -1,111 +1,77 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { StaffLayout } from "@/components/StaffLayout";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { PatientWorkspace } from "@/components/patient/PatientWorkspace";
 import { usePatients } from "@/contexts/PatientContext";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FlaskConical } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { StatusBadge } from "@/components/dashboard/StatusBadge";
 
 const LabPage = () => {
-  const { patients, updateTestStatus } = usePatients();
-  const [results, setResults] = useState<Record<string, string>>({});
+  const { patients, getPatientById } = usePatients();
 
-  const openTests = patients.flatMap(p =>
-    p.tests
-      .filter(t => t.status !== "Completed")
-      .map(t => ({ patient: p, test: t }))
+  const withOpenTests = useMemo(
+    () =>
+      patients.filter(p => p.tests.some(t => t.status === "Pending" || t.status === "In Progress")),
+    [patients]
   );
 
-  const completed = patients.flatMap(p =>
-    p.tests
-      .filter(t => t.status === "Completed")
-      .map(t => ({ patient: p, test: t }))
-  );
+  const [selectedId, setSelectedId] = useState<string | null>(withOpenTests[0]?.id ?? null);
+  const selected = selectedId ? getPatientById(selectedId) : undefined;
 
   return (
     <StaffLayout allowedRoles={["lab", "admin", "doctor"]}>
       <PageHeader
         title="Laboratory"
-        description="Update test status and publish results to the unified patient record and family view."
+        description="Select a patient with open tests — results publish into the shared patient record."
       />
 
-      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-        Open requests ({openTests.length})
-      </h3>
-      <div className="space-y-3 mb-8">
-        {openTests.length === 0 && (
-          <Card>
-            <CardContent className="py-8 text-center text-muted-foreground">No pending tests</CardContent>
-          </Card>
-        )}
-        {openTests.map(({ patient, test }) => (
-          <Card key={test.id}>
-            <CardContent className="pt-4 space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <span className="font-medium text-primary text-sm">{patient.id}</span>
-                  <span className="text-sm text-foreground ml-2">{patient.name}</span>
-                  <p className="text-sm font-semibold mt-1">{test.name}</p>
-                  <p className="text-xs text-muted-foreground">Requested {test.requestedAt}</p>
-                </div>
-                <Badge variant="secondary">{test.status}</Badge>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {test.status === "Pending" && (
-                  <Button size="sm" variant="outline" onClick={() => updateTestStatus(patient.id, test.id, "In Progress")}>
-                    Start Processing
-                  </Button>
-                )}
-              </div>
-              {(test.status === "Pending" || test.status === "In Progress") && (
-                <div className="space-y-2 border-t border-border pt-3">
-                  <Label className="text-xs">Result / notes</Label>
-                  <Input
-                    value={results[test.id] || ""}
-                    onChange={e => setResults(r => ({ ...r, [test.id]: e.target.value }))}
-                    placeholder="Enter result summary"
-                  />
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      updateTestStatus(patient.id, test.id, "Completed", results[test.id] || "Result recorded");
-                      setResults(r => ({ ...r, [test.id]: "" }));
-                    }}
-                  >
-                    Mark Completed & Publish
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-        Completed ({completed.length})
-      </h3>
-      <div className="space-y-2">
-        {completed.length === 0 && (
-          <Card>
-            <CardContent className="py-6 text-center text-muted-foreground flex flex-col items-center gap-2">
-              <FlaskConical className="h-8 w-8 opacity-30" />
-              No completed tests yet
-            </CardContent>
-          </Card>
-        )}
-        {completed.map(({ patient, test }) => (
-          <div key={test.id} className="text-sm bg-card border border-border rounded-md px-3 py-2 flex justify-between gap-3">
-            <div>
-              <span className="text-primary font-medium">{patient.id}</span>
-              <span className="ml-2 font-medium">{test.name}</span>
-              <p className="text-xs text-muted-foreground mt-0.5">{test.result}</p>
-            </div>
-            <Badge variant="outline">Completed</Badge>
-          </div>
-        ))}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <Card className="lg:col-span-1 rounded-2xl shadow-card">
+          <CardHeader>
+            <CardTitle className="text-sm">Open lab work ({withOpenTests.length})</CardTitle>
+          </CardHeader>
+          <CardContent className="p-2 space-y-1 max-h-[70vh] overflow-y-auto">
+            {withOpenTests.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-6">No pending tests</p>
+            )}
+            {withOpenTests.map(p => {
+              const open = p.tests.filter(t => t.status !== "Completed");
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setSelectedId(p.id)}
+                  className={cn(
+                    "w-full text-left px-3 py-2.5 rounded-xl text-sm transition-colors",
+                    selectedId === p.id ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"
+                  )}
+                >
+                  <p className="font-medium">{p.name}</p>
+                  <p className="text-xs text-muted-foreground mb-1">{p.id}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {open.map(t => (
+                      <StatusBadge key={t.id} status={t.status} />
+                    ))}
+                  </div>
+                </button>
+              );
+            })}
+          </CardContent>
+        </Card>
+        <div className="lg:col-span-3">
+          {selected ? (
+            <PatientWorkspace patient={selected} role="lab" defaultTab="tests" />
+          ) : (
+            <Card className="rounded-2xl shadow-card">
+              <CardContent className="py-16 text-center text-muted-foreground">
+                <FlaskConical className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                Select a patient with open lab requests
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </div>
     </StaffLayout>
   );

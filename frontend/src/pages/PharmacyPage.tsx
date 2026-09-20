@@ -1,120 +1,71 @@
+import { useMemo, useState } from "react";
 import { StaffLayout } from "@/components/StaffLayout";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { PatientWorkspace } from "@/components/patient/PatientWorkspace";
 import { usePatients } from "@/contexts/PatientContext";
 import { isPatientActive } from "@/data/mockData";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Package, CheckCircle } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Pill } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const PharmacyPage = () => {
-  const { patients, dispenseMedicine } = usePatients();
+  const { patients, getPatientById } = usePatients();
 
-  type Entry = {
-    patientId: string;
-    patientName: string;
-    medicines: { id: string; name: string; dosage: string; quantity: string }[];
-  };
+  const withPendingRx = useMemo(
+    () => patients.filter(p => isPatientActive(p) && p.medicines.some(m => !m.dispensed)),
+    [patients]
+  );
 
-  const pending: Entry[] = [];
-  const ready: Entry[] = [];
-
-  patients.filter(isPatientActive).forEach(p => {
-    const pendingMeds = p.medicines.filter(m => !m.dispensed);
-    const readyMeds = p.medicines.filter(m => m.dispensed);
-    if (pendingMeds.length > 0) {
-      pending.push({
-        patientId: p.id,
-        patientName: p.name,
-        medicines: pendingMeds.map(m => ({ id: m.id, name: m.name, dosage: m.dosage, quantity: m.duration })),
-      });
-    }
-    if (readyMeds.length > 0) {
-      ready.push({
-        patientId: p.id,
-        patientName: p.name,
-        medicines: readyMeds.map(m => ({ id: m.id, name: m.name, dosage: m.dosage, quantity: m.duration })),
-      });
-    }
-  });
+  const [selectedId, setSelectedId] = useState<string | null>(withPendingRx[0]?.id ?? null);
+  const selected = selectedId ? getPatientById(selectedId) : undefined;
 
   return (
     <StaffLayout allowedRoles={["pharmacy", "admin"]}>
       <PageHeader
         title="Pharmacy"
-        description="Prescriptions from doctors appear here in real time for packing and collection."
+        description="Dispense from the same prescriptions doctors write into the patient workspace."
       />
 
-      <Tabs defaultValue="pending">
-        <TabsList>
-          <TabsTrigger value="pending">Pending ({pending.reduce((n, e) => n + e.medicines.length, 0)})</TabsTrigger>
-          <TabsTrigger value="ready">Ready ({ready.reduce((n, e) => n + e.medicines.length, 0)})</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="pending" className="mt-4 space-y-3">
-          {pending.length === 0 && (
-            <Card>
-              <CardContent className="py-8 text-center text-muted-foreground">No pending prescriptions</CardContent>
-            </Card>
-          )}
-          {pending.map(entry => (
-            <Card key={entry.patientId}>
-              <CardContent className="pt-4">
-                <div className="mb-3">
-                  <span className="font-medium text-primary text-sm">{entry.patientId}</span>
-                  <span className="text-foreground text-sm ml-2">{entry.patientName}</span>
-                </div>
-                <div className="space-y-2">
-                  {entry.medicines.map(m => (
-                    <div key={m.id} className="flex items-center justify-between bg-muted/50 rounded-md px-3 py-2 text-sm">
-                      <div>
-                        <span className="text-foreground font-medium">{m.name}</span>
-                        <span className="text-muted-foreground ml-2">
-                          {m.dosage} · {m.quantity} days
-                        </span>
-                      </div>
-                      <Button size="sm" variant="outline" onClick={() => dispenseMedicine(entry.patientId, m.id)} className="gap-1">
-                        <Package className="h-3.5 w-3.5" /> Mark Packed
-                      </Button>
-                    </div>
-                  ))}
-                </div>
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <Card className="lg:col-span-1 rounded-2xl shadow-card">
+          <CardHeader>
+            <CardTitle className="text-sm">Pending prescriptions ({withPendingRx.length})</CardTitle>
+          </CardHeader>
+          <CardContent className="p-2 space-y-1 max-h-[70vh] overflow-y-auto">
+            {withPendingRx.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-6">Queue clear</p>
+            )}
+            {withPendingRx.map(p => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setSelectedId(p.id)}
+                className={cn(
+                  "w-full text-left px-3 py-2.5 rounded-xl text-sm transition-colors",
+                  selectedId === p.id ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"
+                )}
+              >
+                <p className="font-medium">{p.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {p.id} · {p.medicines.filter(m => !m.dispensed).length} pending
+                </p>
+              </button>
+            ))}
+          </CardContent>
+        </Card>
+        <div className="lg:col-span-3">
+          {selected ? (
+            <PatientWorkspace patient={selected} role="pharmacy" defaultTab="medications" />
+          ) : (
+            <Card className="rounded-2xl shadow-card">
+              <CardContent className="py-16 text-center text-muted-foreground">
+                <Pill className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                Select a patient with pending prescriptions
               </CardContent>
             </Card>
-          ))}
-        </TabsContent>
-
-        <TabsContent value="ready" className="mt-4 space-y-3">
-          {ready.length === 0 && (
-            <Card>
-              <CardContent className="py-8 text-center text-muted-foreground">No medicines ready yet</CardContent>
-            </Card>
           )}
-          {ready.map(entry => (
-            <Card key={entry.patientId}>
-              <CardContent className="pt-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <span className="font-medium text-primary text-sm">{entry.patientId}</span>
-                    <span className="text-foreground text-sm ml-2">{entry.patientName}</span>
-                  </div>
-                  <Badge className="bg-success/10 text-success border-success/20 gap-1">
-                    <CheckCircle className="h-3 w-3" /> Ready
-                  </Badge>
-                </div>
-                <div className="space-y-1">
-                  {entry.medicines.map(m => (
-                    <div key={m.id} className="text-sm text-foreground px-3 py-1.5">
-                      {m.name} – {m.dosage} · {m.quantity} days
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </TabsContent>
-      </Tabs>
+        </div>
+      </div>
     </StaffLayout>
   );
 };

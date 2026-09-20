@@ -1,16 +1,17 @@
 import { useState } from "react";
 import { StaffLayout } from "@/components/StaffLayout";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { PatientWorkspace } from "@/components/patient/PatientWorkspace";
 import { usePatients } from "@/contexts/PatientContext";
 import { DOCTORS, ROOMS } from "@/data/mockData";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, ArrowLeft } from "lucide-react";
 
 const ReceptionPage = () => {
-  const { addPatient, patients } = usePatients();
+  const { addPatient, patients, getPatientById } = usePatients();
   const [form, setForm] = useState({
     name: "",
     age: "",
@@ -25,6 +26,7 @@ const ReceptionPage = () => {
   });
   const [registered, setRegistered] = useState<{ id: string; time: string; name: string } | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [viewPatientId, setViewPatientId] = useState<string | null>(null);
 
   const set = (key: string, value: string) => {
     if (!startedAt) setStartedAt(Date.now());
@@ -66,7 +68,22 @@ const ReceptionPage = () => {
     setStartedAt(null);
   };
 
-  const recent = patients.slice(0, 5);
+  const recent = patients.slice(0, 8);
+  const viewing = viewPatientId ? getPatientById(viewPatientId) : undefined;
+
+  if (viewing) {
+    return (
+      <StaffLayout allowedRoles={["reception", "admin"]}>
+        <div className="mb-4">
+          <Button variant="ghost" size="sm" onClick={() => setViewPatientId(null)} className="gap-1.5">
+            <ArrowLeft className="h-4 w-4" />
+            Back to registration
+          </Button>
+        </div>
+        <PatientWorkspace patient={viewing} role="reception" />
+      </StaffLayout>
+    );
+  }
 
   return (
     <StaffLayout allowedRoles={["reception", "admin"]}>
@@ -77,7 +94,7 @@ const ReceptionPage = () => {
         />
 
         {!registered ? (
-          <Card>
+          <Card className="rounded-2xl shadow-card">
             <CardContent className="pt-6">
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
@@ -91,7 +108,7 @@ const ReceptionPage = () => {
                   </div>
                   <div>
                     <Label>Gender</Label>
-                    <select value={form.gender} onChange={e => set("gender", e.target.value)} className="w-full mt-1.5 h-10 rounded-md border border-input bg-background px-3 text-sm">
+                    <select value={form.gender} onChange={e => set("gender", e.target.value)} className="w-full mt-1.5 h-10 rounded-xl border border-input bg-background px-3 text-sm">
                       <option>Male</option>
                       <option>Female</option>
                       <option>Other</option>
@@ -111,7 +128,7 @@ const ReceptionPage = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <Label>Visit Type</Label>
-                    <select value={form.visitType} onChange={e => set("visitType", e.target.value)} className="w-full mt-1.5 h-10 rounded-md border border-input bg-background px-3 text-sm">
+                    <select value={form.visitType} onChange={e => set("visitType", e.target.value)} className="w-full mt-1.5 h-10 rounded-xl border border-input bg-background px-3 text-sm">
                       <option>OPD</option>
                       <option>Emergency</option>
                       <option>Follow-up</option>
@@ -119,7 +136,7 @@ const ReceptionPage = () => {
                   </div>
                   <div>
                     <Label>Room / Bed</Label>
-                    <select value={form.roomKey} onChange={e => set("roomKey", e.target.value)} className="w-full mt-1.5 h-10 rounded-md border border-input bg-background px-3 text-sm">
+                    <select value={form.roomKey} onChange={e => set("roomKey", e.target.value)} className="w-full mt-1.5 h-10 rounded-xl border border-input bg-background px-3 text-sm">
                       {ROOMS.map(r => (
                         <option key={`${r.room}-${r.bed}`} value={`${r.room}-${r.bed}`}>
                           {r.label}
@@ -129,7 +146,7 @@ const ReceptionPage = () => {
                   </div>
                   <div>
                     <Label>Assign Doctor</Label>
-                    <select value={form.doctorIndex} onChange={e => set("doctorIndex", e.target.value)} className="w-full mt-1.5 h-10 rounded-md border border-input bg-background px-3 text-sm">
+                    <select value={form.doctorIndex} onChange={e => set("doctorIndex", e.target.value)} className="w-full mt-1.5 h-10 rounded-xl border border-input bg-background px-3 text-sm">
                       {DOCTORS.map((d, i) => (
                         <option key={d.name} value={String(i)}>
                           {d.name}
@@ -155,7 +172,7 @@ const ReceptionPage = () => {
             </CardContent>
           </Card>
         ) : (
-          <Card className="border-success/30 bg-success/5">
+          <Card className="rounded-2xl border-success/30 bg-success/5 shadow-card">
             <CardContent className="pt-6 text-center space-y-4">
               <CheckCircle2 className="h-12 w-12 text-success mx-auto" />
               <div>
@@ -166,9 +183,12 @@ const ReceptionPage = () => {
               <p className="text-sm text-muted-foreground">
                 Registered in <span className="font-semibold text-foreground">{registered.time}s</span> · Record is live across Doctor, Nurse, Pharmacy & Family
               </p>
-              <Button onClick={() => setRegistered(null)} variant="outline">
-                Register Another Patient
-              </Button>
+              <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                <Button onClick={() => setViewPatientId(registered.id)}>Open Patient Workspace</Button>
+                <Button onClick={() => setRegistered(null)} variant="outline">
+                  Register Another Patient
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -177,13 +197,18 @@ const ReceptionPage = () => {
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Recent registrations</h3>
           <div className="space-y-2">
             {recent.map(p => (
-              <div key={p.id} className="flex items-center justify-between text-sm bg-card border border-border rounded-md px-3 py-2">
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setViewPatientId(p.id)}
+                className="w-full flex items-center justify-between text-sm bg-card border border-border rounded-xl px-3 py-2.5 hover:bg-muted/40 transition-colors text-left"
+              >
                 <div>
                   <span className="font-medium text-primary">{p.id}</span>
                   <span className="text-foreground ml-2">{p.name}</span>
                 </div>
                 <span className="text-xs text-muted-foreground">{p.treatmentStatus}</span>
-              </div>
+              </button>
             ))}
           </div>
         </div>
