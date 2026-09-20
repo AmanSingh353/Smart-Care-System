@@ -55,6 +55,8 @@ export function PatientWorkspace({ patient, role: roleProp, className, defaultTa
     addNursingUpdate,
     updateTreatmentStatus,
     updatePaymentStatus,
+    markTestReviewed,
+    markTestCritical,
   } = usePatients();
 
   const [tab, setTab] = useState<TabId>(defaultTab);
@@ -156,7 +158,7 @@ export function PatientWorkspace({ patient, role: roleProp, className, defaultTa
       {(tab === "overview" || tab === "journey") && (
         <>
           <PatientJourney patient={patient} />
-          {!familyMode && <CareGuardPanel />}
+          {!familyMode && <CareGuardPanel patientId={patient.id} />}
         </>
       )}
 
@@ -319,15 +321,72 @@ export function PatientWorkspace({ patient, role: roleProp, className, defaultTa
                         value={testResult[t.id] || ""}
                         onChange={e => setTestResult(r => ({ ...r, [t.id]: e.target.value }))}
                       />
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          updateTestStatus(patient.id, t.id, "Completed", testResult[t.id] || "Result recorded");
-                          setTestResult(r => ({ ...r, [t.id]: "" }));
-                        }}
-                      >
-                        Mark completed & publish
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            updateTestStatus(patient.id, t.id, "Completed", testResult[t.id] || "Result recorded");
+                            setTestResult(r => ({ ...r, [t.id]: "" }));
+                          }}
+                        >
+                          Mark completed & publish
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            updateTestStatus(
+                              patient.id,
+                              t.id,
+                              "Completed",
+                              testResult[t.id] || "Result recorded",
+                              { isCritical: true }
+                            );
+                            setTestResult(r => ({ ...r, [t.id]: "" }));
+                          }}
+                        >
+                          Complete as critical
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {(role === "doctor" || role === "admin") && (
+            <Card className="rounded-2xl shadow-card">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold">Doctor lab review</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {(patient.tests ?? []).filter(t => t.status === "Completed" && !t.reviewedAt).length === 0 && (
+                  <p className="text-sm text-muted-foreground">No results awaiting review</p>
+                )}
+                {(patient.tests ?? [])
+                  .filter(t => t.status === "Completed" && !t.reviewedAt)
+                  .map(t => (
+                    <div key={t.id} className="rounded-xl border border-border p-3 space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-semibold">
+                          {t.name}
+                          {t.isCritical && (
+                            <span className="ml-2 text-[10px] uppercase font-bold text-destructive">Critical</span>
+                          )}
+                        </p>
+                        <StatusBadge status="Completed" />
+                      </div>
+                      {t.result && <p className="text-xs text-muted-foreground">{t.result}</p>}
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" onClick={() => markTestReviewed(patient.id, t.id, "Assigned doctor")}>
+                          Mark reviewed
+                        </Button>
+                        {!t.isCritical && (
+                          <Button size="sm" variant="outline" onClick={() => markTestCritical(patient.id, t.id, true)}>
+                            Flag critical (lab workflow)
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   ))}
               </CardContent>
@@ -485,7 +544,11 @@ export function PatientWorkspace({ patient, role: roleProp, className, defaultTa
 
       {tab === "activity" && <PatientActivityTimeline patient={patient} />}
 
-      {tab === "journey" && familyMode && <CareGuardPanel compact />}
+      {tab === "journey" && familyMode && (
+        <p className="text-sm text-muted-foreground rounded-2xl border border-dashed border-border bg-muted/20 px-4 py-3">
+          Your care team is coordinating this journey. You will receive updates when important steps are completed.
+        </p>
+      )}
     </div>
   );
 }

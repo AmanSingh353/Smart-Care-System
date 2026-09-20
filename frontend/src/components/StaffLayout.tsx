@@ -12,10 +12,12 @@ import {
   LogOut,
   Bell,
   ChevronDown,
+  Shield,
 } from "lucide-react";
 import hospitalLogo from "@/assets/hospital-logo.png";
 import { useAuth, ROLE_NAV, ROLE_LABELS, StaffRole } from "@/contexts/AuthContext";
 import { usePatients } from "@/contexts/PatientContext";
+import { useCareGuard } from "@/contexts/CareGuardContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -30,21 +32,22 @@ const iconMap: Record<string, typeof LayoutDashboard> = {
   Billing: Receipt,
   Laboratory: FlaskConical,
   Lab: FlaskConical,
+  CareGuard: Shield,
 };
 
 const GROUP_LABELS: Record<StaffRole, { title: string; paths?: string[] }[]> = {
   admin: [
-    { title: "Overview", paths: ["/admin"] },
+    { title: "Overview", paths: ["/admin", "/careguard"] },
     { title: "Clinical", paths: ["/doctor", "/nurse"] },
     { title: "Diagnostics", paths: ["/lab", "/pharmacy"] },
     { title: "Operations", paths: ["/reception", "/billing"] },
   ],
   reception: [{ title: "Front desk" }],
-  doctor: [{ title: "Clinical" }],
-  nurse: [{ title: "Clinical" }],
-  pharmacy: [{ title: "Diagnostics" }],
-  billing: [{ title: "Finance" }],
-  lab: [{ title: "Diagnostics" }],
+  doctor: [{ title: "Clinical", paths: ["/doctor", "/careguard"] }],
+  nurse: [{ title: "Clinical", paths: ["/nurse", "/careguard"] }],
+  pharmacy: [{ title: "Diagnostics", paths: ["/pharmacy", "/careguard"] }],
+  billing: [{ title: "Finance", paths: ["/billing", "/careguard"] }],
+  lab: [{ title: "Diagnostics", paths: ["/lab", "/careguard"] }],
 };
 
 export const StaffLayout = ({ children, allowedRoles }: { children: ReactNode; allowedRoles?: StaffRole[] }) => {
@@ -52,11 +55,13 @@ export const StaffLayout = ({ children, allowedRoles }: { children: ReactNode; a
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { role, logout } = useAuth();
   const { patients } = usePatients();
+  const { getRoleSignals } = useCareGuard();
 
   const unread = useMemo(
     () => patients.reduce((n, p) => n + p.notifications.filter(x => !x.read).length, 0),
     [patients]
   );
+  const careguardOpen = getRoleSignals(role).length;
 
   if (!role || role === "family") {
     return <Navigate to="/login" replace />;
@@ -99,7 +104,12 @@ export const StaffLayout = ({ children, allowedRoles }: { children: ReactNode; a
                     )}
                   >
                     <Icon className="h-4 w-4 shrink-0" />
-                    <span className="truncate">{item.label}</span>
+                    <span className="truncate flex-1">{item.label}</span>
+                    {item.path === "/careguard" && careguardOpen > 0 && (
+                      <span className="text-[10px] font-bold tabular-nums bg-primary/15 text-primary rounded-full px-1.5 py-0.5">
+                        {careguardOpen}
+                      </span>
+                    )}
                   </Link>
                 );
               })}

@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { StaffLayout } from "@/components/StaffLayout";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { PatientWorkspace } from "@/components/patient/PatientWorkspace";
+import { CareGuardPanel } from "@/components/patient/CareGuardPanel";
 import { usePatients } from "@/contexts/PatientContext";
 import { getBillTotal } from "@/data/mockData";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,8 +14,14 @@ import { cn } from "@/lib/utils";
 
 const BillingPage = () => {
   const { patients, getPatientById } = usePatients();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [params] = useSearchParams();
+  const [selectedId, setSelectedId] = useState<string | null>(params.get("patient"));
   const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    const p = params.get("patient");
+    if (p) setSelectedId(p);
+  }, [params]);
 
   const filtered = patients.filter(
     p =>
@@ -34,6 +41,8 @@ const BillingPage = () => {
         title="Billing & Payments"
         description="Charges stay linked to care actions — open a patient workspace to review and collect."
       />
+
+      <CareGuardPanel roleMode className="mb-6" compact />
 
       <div className="grid grid-cols-2 gap-3 mb-6 max-w-md">
         <Card className="rounded-2xl shadow-card">

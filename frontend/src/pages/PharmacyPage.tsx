@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { StaffLayout } from "@/components/StaffLayout";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { PatientWorkspace } from "@/components/patient/PatientWorkspace";
+import { CareGuardPanel } from "@/components/patient/CareGuardPanel";
 import { usePatients } from "@/contexts/PatientContext";
 import { isPatientActive } from "@/data/mockData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,13 +12,22 @@ import { cn } from "@/lib/utils";
 
 const PharmacyPage = () => {
   const { patients, getPatientById } = usePatients();
+  const [params] = useSearchParams();
 
   const withPendingRx = useMemo(
     () => patients.filter(p => isPatientActive(p) && p.medicines.some(m => !m.dispensed)),
     [patients]
   );
 
-  const [selectedId, setSelectedId] = useState<string | null>(withPendingRx[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    params.get("patient") || withPendingRx[0]?.id || null
+  );
+
+  useEffect(() => {
+    const p = params.get("patient");
+    if (p) setSelectedId(p);
+  }, [params]);
+
   const selected = selectedId ? getPatientById(selectedId) : undefined;
 
   return (
@@ -25,6 +36,8 @@ const PharmacyPage = () => {
         title="Pharmacy"
         description="Dispense from the same prescriptions doctors write into the patient workspace."
       />
+
+      <CareGuardPanel roleMode className="mb-6" compact />
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <Card className="lg:col-span-1 rounded-2xl shadow-card">
@@ -53,14 +66,15 @@ const PharmacyPage = () => {
             ))}
           </CardContent>
         </Card>
+
         <div className="lg:col-span-3">
           {selected ? (
             <PatientWorkspace patient={selected} role="pharmacy" defaultTab="medications" />
           ) : (
             <Card className="rounded-2xl shadow-card">
-              <CardContent className="py-16 text-center text-muted-foreground">
-                <Pill className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                Select a patient with pending prescriptions
+              <CardContent className="py-16 text-center">
+                <Pill className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
+                <p className="text-muted-foreground">Select a prescription queue item</p>
               </CardContent>
             </Card>
           )}

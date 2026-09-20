@@ -61,6 +61,7 @@ export const useAuth = () => {
 export const ROLE_NAV: Record<StaffRole, { label: string; path: string }[]> = {
   admin: [
     { label: "Dashboard", path: "/admin" },
+    { label: "CareGuard", path: "/careguard" },
     { label: "Registration", path: "/reception" },
     { label: "Doctor", path: "/doctor" },
     { label: "Nurse", path: "/nurse" },
@@ -69,11 +70,26 @@ export const ROLE_NAV: Record<StaffRole, { label: string; path: string }[]> = {
     { label: "Billing", path: "/billing" },
   ],
   reception: [{ label: "Registration", path: "/reception" }],
-  doctor: [{ label: "Patients", path: "/doctor" }],
-  nurse: [{ label: "Nursing Station", path: "/nurse" }],
-  pharmacy: [{ label: "Pharmacy", path: "/pharmacy" }],
-  billing: [{ label: "Billing", path: "/billing" }],
-  lab: [{ label: "Laboratory", path: "/lab" }],
+  doctor: [
+    { label: "Patients", path: "/doctor" },
+    { label: "CareGuard", path: "/careguard" },
+  ],
+  nurse: [
+    { label: "Nursing Station", path: "/nurse" },
+    { label: "CareGuard", path: "/careguard" },
+  ],
+  pharmacy: [
+    { label: "Pharmacy", path: "/pharmacy" },
+    { label: "CareGuard", path: "/careguard" },
+  ],
+  billing: [
+    { label: "Billing", path: "/billing" },
+    { label: "CareGuard", path: "/careguard" },
+  ],
+  lab: [
+    { label: "Laboratory", path: "/lab" },
+    { label: "CareGuard", path: "/careguard" },
+  ],
 };
 
 export const ROLE_LABELS: Record<StaffRole | "family", string> = {

@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { StaffLayout } from "@/components/StaffLayout";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { PatientWorkspace } from "@/components/patient/PatientWorkspace";
+import { CareGuardPanel } from "@/components/patient/CareGuardPanel";
 import { usePatients } from "@/contexts/PatientContext";
 import { isPatientActive, roomLabel } from "@/data/mockData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,18 +12,26 @@ import { cn } from "@/lib/utils";
 
 const NursePage = () => {
   const { patients, getPatientById } = usePatients();
+  const [params] = useSearchParams();
   const activePatients = patients.filter(isPatientActive);
-  const [selectedId, setSelectedId] = useState<string | null>(activePatients[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    params.get("patient") || activePatients[0]?.id || null
+  );
+
+  useEffect(() => {
+    const p = params.get("patient");
+    if (p) setSelectedId(p);
+  }, [params]);
+
   const selected = selectedId ? getPatientById(selectedId) : undefined;
 
   const overdue = useMemo(() => {
-    const currentHour = new Date().getHours();
     const list: { patientId: string; medicine: string; time: string }[] = [];
     activePatients.forEach(p => {
       p.medicines.forEach(m => {
         m.schedule.forEach(s => {
-          const hour = parseInt(s.time.split(":")[0], 10);
-          if (!s.given && hour < currentHour) {
+          if (s.given) return;
+          if (s.dueAt && new Date(s.dueAt).getTime() < Date.now()) {
             list.push({ patientId: p.id, medicine: m.name, time: s.time });
           }
         });
@@ -36,6 +46,8 @@ const NursePage = () => {
         title="Nursing Station"
         description="Open a patient workspace to complete doses, post updates, and advance care status."
       />
+
+      <CareGuardPanel roleMode className="mb-6" compact />
 
       {overdue.length > 0 && (
         <div className="mb-6 p-3 bg-warning/10 border border-warning/20 rounded-2xl flex items-start gap-2">

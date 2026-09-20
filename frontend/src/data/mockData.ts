@@ -71,6 +71,8 @@ export interface MedicineSchedule {
   time: string;
   given: boolean;
   givenAt?: string;
+  /** ISO due timestamp — used by CareGuard overdue detection when present */
+  dueAt?: string;
 }
 
 export interface LabTest {
@@ -79,7 +81,13 @@ export interface LabTest {
   status: TestStatus;
   result?: string;
   requestedAt: string;
+  /** ISO request time for CareGuard delay rules */
+  requestedAtIso?: string;
   completedAt?: string;
+  /** Explicit critical flag from lab workflow only — CareGuard never infers this */
+  isCritical?: boolean;
+  reviewedAt?: string;
+  reviewedBy?: string;
 }
 
 export interface NurseUpdate {
@@ -155,10 +163,18 @@ export const ROOMS = [
   { room: "310", bed: "A", label: "Ward C - Room 310 Bed A" },
 ];
 
-let nextPatientId = 1006;
+let nextPatientId = 1008;
 
 /** Unique MVP patient IDs: SCS-1001, SCS-1002, … */
 export const generatePatientId = () => `SCS-${nextPatientId++}`;
+
+/** Reset ID counter when restoring demo seed */
+export const resetPatientIdCounter = (next = 1008) => {
+  nextPatientId = next;
+};
+
+const hoursAgoIso = (hours: number) => new Date(Date.now() - hours * 3600_000).toISOString();
+const minutesAgoIso = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 
 export const normalizePatientId = (id: string) => id.trim().toUpperCase();
 
@@ -209,7 +225,18 @@ export const roomLabel = (p: Patient) =>
 const today = new Date().toISOString();
 const yesterday = new Date(Date.now() - 86400000).toISOString();
 
+/**
+ * CareGuard demo scenarios (deterministic):
+ * A SCS-1001 — no active signals
+ * B SCS-1002 — lab result awaiting review
+ * C SCS-1003 — prescription awaiting pharmacy
+ * D SCS-1004 — treatment task overdue
+ * E SCS-1005 — allergy / prescription safety review
+ * F SCS-1006 — explicitly critical lab result
+ * SCS-1007 — discharge workflow blocked (billing)
+ */
 export const initialPatients: Patient[] = [
+  // Patient A — quiet / no CareGuard signals
   {
     id: "SCS-1001",
     name: "Rajesh Kumar",
@@ -237,17 +264,8 @@ export const initialPatients: Patient[] = [
         dispensed: true,
         schedule: [
           { time: "08:00", given: true, givenAt: "08:05" },
-          { time: "20:00", given: false },
+          { time: "20:00", given: false, dueAt: hoursAgoIso(-2) }, // future due — not overdue
         ],
-      },
-      {
-        id: "m2",
-        name: "Cetirizine",
-        dosage: "10 mg",
-        frequency: "Once a day",
-        duration: "3",
-        dispensed: false,
-        schedule: [{ time: "10:00", given: false }],
       },
     ],
     tests: [
@@ -257,13 +275,10 @@ export const initialPatients: Patient[] = [
         status: "Completed",
         result: "WBC slightly elevated; otherwise normal",
         requestedAt: "09:00",
+        requestedAtIso: hoursAgoIso(4),
         completedAt: "11:20",
-      },
-      {
-        id: "t2",
-        name: "Urine Routine",
-        status: "Pending",
-        requestedAt: "09:30",
+        reviewedAt: "11:45",
+        reviewedBy: "Dr. Ananya Mehta",
       },
     ],
     nurseUpdates: [
@@ -278,18 +293,16 @@ export const initialPatients: Patient[] = [
       makeBillItem("consultation", "Consultation Fee", 500, 1),
       makeBillItem("room", "Room 101 Bed A (1 day)", 800, 1),
       makeBillItem("medicine", "Paracetamol 500 mg", 5, 10),
-      makeBillItem("medicine", "Cetirizine 10 mg", 8, 3),
       makeBillItem("test", "CBC Test", 300, 1),
-      makeBillItem("test", "Urine Routine Test", 200, 1),
     ],
     billStatus: "Unpaid",
     notifications: [
       { id: "n1", message: "Medicine given at 08:00 – Paracetamol 500 mg", time: "08:05", read: false, type: "medicine" },
-      { id: "n2", message: "Test result available: CBC", time: "11:20", read: false, type: "test" },
-      { id: "n3", message: "New medicine prescribed: Cetirizine", time: "09:35", read: true, type: "medicine" },
+      { id: "n2", message: "Your care team has reviewed your latest report.", time: "11:45", read: false, type: "family" },
     ],
     requests: [],
   },
+  // Patient B — LAB_REVIEW_PENDING (+ delayed pending order for LAB)
   {
     id: "SCS-1002",
     name: "Priya Sharma",
@@ -304,7 +317,7 @@ export const initialPatients: Patient[] = [
     assignedDoctor: "Dr. Vikram Singh",
     department: "Emergency",
     diagnosis: "Acute abdominal pain. Advised ultrasound.",
-    allergies: "Penicillin",
+    allergies: "None known",
     symptoms: "Severe abdominal pain, nausea",
     treatmentStatus: "Awaiting Test",
     medicines: [
@@ -314,22 +327,27 @@ export const initialPatients: Patient[] = [
         dosage: "40 mg",
         frequency: "Once a day",
         duration: "7",
-        dispensed: false,
-        schedule: [{ time: "07:00", given: false }],
+        dispensed: true,
+        schedule: [{ time: "07:00", given: true, givenAt: "07:10" }],
       },
     ],
     tests: [
       {
         id: "t3",
         name: "Ultrasound Abdomen",
-        status: "In Progress",
+        status: "Completed",
+        result: "No free fluid. Mild ileus pattern.",
         requestedAt: "07:30",
+        requestedAtIso: hoursAgoIso(3),
+        completedAt: "10:00",
+        // not reviewed → LAB_REVIEW_PENDING
       },
       {
         id: "t4",
         name: "LFT",
         status: "Pending",
         requestedAt: "07:45",
+        requestedAtIso: hoursAgoIso(2), // beyond 15-min demo threshold → LAB_ORDER_DELAY
       },
     ],
     nurseUpdates: [
@@ -350,10 +368,11 @@ export const initialPatients: Patient[] = [
     billStatus: "Unpaid",
     notifications: [
       { id: "n4", message: "Patient admitted to Room 205 Bed A", time: "07:00", read: false, type: "registration" },
-      { id: "n5", message: "Test requested: Ultrasound Abdomen", time: "07:30", read: false, type: "test" },
+      { id: "n5", message: "Test result available: Ultrasound Abdomen", time: "10:00", read: false, type: "test" },
     ],
     requests: [],
   },
+  // Patient C — MEDICATION_DISPENSING_PENDING
   {
     id: "SCS-1003",
     name: "Amit Patel",
@@ -363,14 +382,14 @@ export const initialPatients: Patient[] = [
     emergencyContact: "Meera Patel · 9988776600",
     visitType: "Follow-up",
     admissionDate: yesterday,
-    room: "",
-    bed: "",
+    room: "205",
+    bed: "B",
     assignedDoctor: "Dr. Neha Kapoor",
     department: "Cardiology",
-    diagnosis: "Diabetes follow-up. Sugar levels normal.",
-    allergies: "Sulfa drugs",
+    diagnosis: "Diabetes follow-up. Medication adjusted.",
+    allergies: "None known",
     symptoms: "None currently",
-    treatmentStatus: "Discharged",
+    treatmentStatus: "Under Treatment",
     medicines: [
       {
         id: "m4",
@@ -378,10 +397,10 @@ export const initialPatients: Patient[] = [
         dosage: "500 mg",
         frequency: "Twice a day",
         duration: "30",
-        dispensed: true,
+        dispensed: false,
         schedule: [
-          { time: "08:00", given: true, givenAt: "08:10" },
-          { time: "20:00", given: true, givenAt: "20:05" },
+          { time: "08:00", given: false, dueAt: hoursAgoIso(-1) },
+          { time: "20:00", given: false, dueAt: hoursAgoIso(-8) },
         ],
       },
     ],
@@ -392,7 +411,10 @@ export const initialPatients: Patient[] = [
         status: "Completed",
         result: "6.2% — within target range",
         requestedAt: "10:00",
+        requestedAtIso: hoursAgoIso(6),
         completedAt: "14:00",
+        reviewedAt: "14:30",
+        reviewedBy: "Dr. Neha Kapoor",
       },
     ],
     nurseUpdates: [],
@@ -401,12 +423,13 @@ export const initialPatients: Patient[] = [
       makeBillItem("medicine", "Metformin 500 mg", 3, 60),
       makeBillItem("test", "HbA1c Test", 500, 1),
     ],
-    billStatus: "Paid",
+    billStatus: "Unpaid",
     notifications: [
-      { id: "n6", message: "Payment received. Bill settled.", time: "16:00", read: true, type: "billing" },
+      { id: "n6", message: "New medicine prescribed: Metformin", time: "14:35", read: false, type: "medicine" },
     ],
     requests: [],
   },
+  // Patient D — TREATMENT_TASK_OVERDUE
   {
     id: "SCS-1004",
     name: "Sneha Reddy",
@@ -420,17 +443,34 @@ export const initialPatients: Patient[] = [
     bed: "A",
     assignedDoctor: "Dr. Rohan Desai",
     department: "Orthopedics",
-    diagnosis: "",
+    diagnosis: "Soft tissue injury — knee. Conservative management.",
     allergies: "None known",
     symptoms: "Knee pain after fall",
-    treatmentStatus: "Registered",
-    medicines: [],
+    treatmentStatus: "Under Treatment",
+    medicines: [
+      {
+        id: "m6",
+        name: "Ibuprofen",
+        dosage: "400 mg",
+        frequency: "Twice a day",
+        duration: "5",
+        dispensed: true,
+        schedule: [
+          {
+            time: "08:00",
+            given: false,
+            dueAt: minutesAgoIso(90), // overdue → TREATMENT_TASK_OVERDUE
+          },
+        ],
+      },
+    ],
     tests: [],
     nurseUpdates: [],
     billItems: [
       makeBillItem("consultation", "Consultation Fee", 500, 1),
       makeBillItem("other", "Registration Fee", 100, 1),
       makeBillItem("room", "Room 310 Bed A (1 day)", 800, 1),
+      makeBillItem("medicine", "Ibuprofen 400 mg", 8, 10),
     ],
     billStatus: "Unpaid",
     notifications: [
@@ -438,6 +478,7 @@ export const initialPatients: Patient[] = [
     ],
     requests: [],
   },
+  // Patient E — ALLERGY_PRESCRIPTION_REVIEW
   {
     id: "SCS-1005",
     name: "Vikram Joshi",
@@ -451,49 +492,147 @@ export const initialPatients: Patient[] = [
     bed: "B",
     assignedDoctor: "Dr. Ananya Mehta",
     department: "General Medicine",
-    diagnosis: "Hypertension review. Medication adjusted.",
-    allergies: "None known",
-    symptoms: "Mild dizziness",
-    treatmentStatus: "Ready for Discharge",
+    diagnosis: "Suspected bacterial pharyngitis.",
+    allergies: "Amoxicillin",
+    symptoms: "Sore throat, mild fever",
+    treatmentStatus: "Under Treatment",
     medicines: [
       {
-        id: "m5",
-        name: "Amlodipine",
-        dosage: "5 mg",
-        frequency: "Once a day",
-        duration: "30",
+        id: "m7",
+        name: "Amoxicillin",
+        dosage: "500 mg",
+        frequency: "Three times a day",
+        duration: "5",
         dispensed: true,
-        schedule: [{ time: "09:00", given: true, givenAt: "09:10" }],
+        schedule: [{ time: "09:00", given: false, dueAt: hoursAgoIso(-3) }],
       },
     ],
+    tests: [],
+    nurseUpdates: [],
+    billItems: [
+      makeBillItem("consultation", "Consultation Fee", 500, 1),
+      makeBillItem("room", "Room 101 Bed B (1 day)", 800, 1),
+      makeBillItem("medicine", "Amoxicillin 500 mg", 10, 15),
+    ],
+    billStatus: "Unpaid",
+    notifications: [
+      { id: "n8", message: "New medicine prescribed: Amoxicillin", time: "11:00", read: false, type: "medicine" },
+    ],
+    requests: [],
+  },
+  // Patient F — CRITICAL_RESULT_REVIEW (explicit isCritical from lab workflow)
+  {
+    id: "SCS-1006",
+    name: "Meera Nair",
+    age: 41,
+    gender: "Female",
+    phone: "9811122233",
+    emergencyContact: "Arjun Nair · 9811122200",
+    visitType: "Emergency",
+    admissionDate: today,
+    room: "205",
+    bed: "A",
+    assignedDoctor: "Dr. Vikram Singh",
+    department: "Emergency",
+    diagnosis: "Chest pain — rule out ACS.",
+    allergies: "None known",
+    symptoms: "Chest discomfort, sweating",
+    treatmentStatus: "Under Treatment",
+    medicines: [],
     tests: [
       {
-        id: "t6",
-        name: "ECG",
+        id: "t7",
+        name: "Troponin I",
         status: "Completed",
-        result: "Normal sinus rhythm",
-        requestedAt: "09:30",
-        completedAt: "10:15",
+        result: "Elevated — lab flagged as critical for clinician review",
+        requestedAt: "08:10",
+        requestedAtIso: hoursAgoIso(2),
+        completedAt: "09:05",
+        isCritical: true,
+        // not reviewed → CRITICAL_RESULT_REVIEW
       },
     ],
     nurseUpdates: [
       {
-        id: "nu3",
-        note: "BP stable at 128/82. Ready for discharge pending bill clearance.",
+        id: "nu4",
+        note: "Patient on continuous monitoring. Awaiting doctor review of troponin.",
+        time: "09:10",
+        nurseName: "Nurse Kavita",
+      },
+    ],
+    billItems: [
+      makeBillItem("consultation", "Emergency Consultation", 1000, 1),
+      makeBillItem("test", "Troponin I", 800, 1),
+    ],
+    billStatus: "Unpaid",
+    notifications: [
+      { id: "n9", message: "Test result available: Troponin I", time: "09:05", read: false, type: "test" },
+    ],
+    requests: [],
+  },
+  // Discharge blocked — DISCHARGE_WORKFLOW_BLOCKED
+  {
+    id: "SCS-1007",
+    name: "Karan Malhotra",
+    age: 55,
+    gender: "Male",
+    phone: "9900112233",
+    emergencyContact: "Neha Malhotra · 9900112200",
+    visitType: "OPD",
+    admissionDate: yesterday,
+    room: "310",
+    bed: "B",
+    assignedDoctor: "Dr. Rohan Desai",
+    department: "Orthopedics",
+    diagnosis: "Stable post-procedure. Cleared clinically for discharge.",
+    allergies: "None known",
+    symptoms: "Improving",
+    treatmentStatus: "Ready for Discharge",
+    medicines: [
+      {
+        id: "m8",
+        name: "Paracetamol",
+        dosage: "500 mg",
+        frequency: "As needed",
+        duration: "3",
+        dispensed: true,
+        schedule: [{ time: "12:00", given: true, givenAt: "12:05" }],
+      },
+    ],
+    tests: [
+      {
+        id: "t8",
+        name: "X-Ray Chest",
+        status: "Completed",
+        result: "No acute findings",
+        requestedAt: "09:00",
+        requestedAtIso: hoursAgoIso(20),
+        completedAt: "10:00",
+        reviewedAt: "10:30",
+        reviewedBy: "Dr. Rohan Desai",
+      },
+    ],
+    nurseUpdates: [
+      {
+        id: "nu5",
+        note: "Ready for discharge pending bill clearance.",
         time: "13:00",
         nurseName: "Nurse Priya",
       },
     ],
     billItems: [
       makeBillItem("consultation", "Consultation Fee", 500, 1),
-      makeBillItem("room", "Room 101 Bed B (1 day)", 800, 1),
-      makeBillItem("medicine", "Amlodipine 5 mg", 15, 30),
-      makeBillItem("test", "ECG Test", 350, 1),
+      makeBillItem("room", "Room 310 Bed B (1 day)", 800, 1),
+      makeBillItem("medicine", "Paracetamol 500 mg", 5, 6),
+      makeBillItem("test", "X-Ray Chest", 600, 1),
     ],
     billStatus: "Unpaid",
     notifications: [
-      { id: "n8", message: "Treatment complete. Discharge pending payment.", time: "13:05", read: false, type: "status" },
+      { id: "n10", message: "Treatment complete. Discharge pending payment.", time: "13:05", read: false, type: "status" },
     ],
     requests: [],
   },
 ];
+
+/** Alias for demo reset */
+export const careGuardDemoPatients = initialPatients;

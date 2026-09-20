@@ -8,7 +8,9 @@ export type CareEvent =
   | "pharmacy:updated"
   | "notification:new"
   | "family:updated"
-  | "admin:live";
+  | "admin:live"
+  | "careguard:signal-created"
+  | "careguard:signal-updated";
 
 let io: Server | null = null;
 

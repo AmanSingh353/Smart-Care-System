@@ -1,12 +1,8 @@
-import { useMemo, useState } from "react";
-import { StaffLayout } from "@/components/StaffLayout";
-import { PageHeader } from "@/components/dashboard/PageHeader";
-import { StatCard } from "@/components/dashboard/StatCard";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
-import { CareGuardPanel } from "@/components/patient/CareGuardPanel";
 import { PatientWorkspace } from "@/components/patient/PatientWorkspace";
 import { getJourneyStages } from "@/components/patient/workspaceUtils";
 import { usePatients } from "@/contexts/PatientContext";
+import { useCareGuard } from "@/contexts/CareGuardContext";
 import { getBillTotal, isPatientActive, roomLabel } from "@/data/mockData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,11 +15,18 @@ import {
   IndianRupee,
   ArrowLeft,
   AlertTriangle,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Link } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { StaffLayout } from "@/components/StaffLayout";
+import { PageHeader } from "@/components/dashboard/PageHeader";
+import { StatCard } from "@/components/dashboard/StatCard";
 
 const AdminDashboard = () => {
-  const { patients, getPatientById, updateFamilyRequestStatus } = usePatients();
+  const { patients, getPatientById, updateFamilyRequestStatus, resetDemoData } = usePatients();
+  const { summary, resetDemoSignals } = useCareGuard();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const activePatients = patients.filter(isPatientActive);
@@ -116,7 +119,56 @@ const AdminDashboard = () => {
         <StatCard label="Revenue collected" value={`₹${revenue.toLocaleString("en-IN")}`} icon={IndianRupee} />
       </div>
 
-      <CareGuardPanel className="mb-6" />
+      <Card className="rounded-2xl shadow-card mb-6 border-primary/20">
+        <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <Shield className="h-4 w-4 text-primary" />
+            CareGuard summary
+          </CardTitle>
+          <Button asChild size="sm" variant="outline">
+            <Link to="/careguard">Open CareGuard</Link>
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <div className="rounded-xl bg-muted/40 px-3 py-2">
+              <p className="text-[10px] uppercase text-muted-foreground font-semibold">Open</p>
+              <p className="text-lg font-bold tabular-nums">{summary.open}</p>
+            </div>
+            <div className="rounded-xl bg-muted/40 px-3 py-2">
+              <p className="text-[10px] uppercase text-muted-foreground font-semibold">High priority</p>
+              <p className="text-lg font-bold tabular-nums">{summary.highPriority}</p>
+            </div>
+            <div className="rounded-xl bg-muted/40 px-3 py-2">
+              <p className="text-[10px] uppercase text-muted-foreground font-semibold">Need review</p>
+              <p className="text-lg font-bold tabular-nums">{summary.awaitingReview}</p>
+            </div>
+            <div className="rounded-xl bg-muted/40 px-3 py-2">
+              <p className="text-[10px] uppercase text-muted-foreground font-semibold">Resolved today</p>
+              <p className="text-lg font-bold tabular-nums">{summary.resolvedToday}</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            {(["DOCTOR", "NURSE", "LAB", "PHARMACY", "BILLING"] as const).map(r => (
+              <div key={r} className="rounded-xl border border-border/60 px-2 py-2 text-center">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{r}</p>
+                <p className="text-sm font-bold tabular-nums">{summary.byRole[r] || 0}</p>
+              </div>
+            ))}
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="mt-3"
+            onClick={() => {
+              resetDemoData();
+              setTimeout(() => resetDemoSignals(), 50);
+            }}
+          >
+            Reset CareGuard demo scenarios
+          </Button>
+        </CardContent>
+      </Card>
 
       {delayedPatients.length > 0 && (
         <Card className="rounded-2xl shadow-card mb-6 border-warning/30">

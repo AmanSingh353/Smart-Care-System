@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PatientProvider } from "@/contexts/PatientContext";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { CareGuardProvider } from "@/contexts/CareGuardContext";
 import LoginPage from "./pages/LoginPage";
 import LandingPage from "./pages/LandingPage";
 import RegisterPage from "./pages/RegisterPage";
@@ -16,6 +17,7 @@ import NursePage from "./pages/NursePage";
 import BillingPage from "./pages/BillingPage";
 import FamilyDashboard from "./pages/FamilyDashboard";
 import LabPage from "./pages/LabPage";
+import CareGuardDashboard from "./pages/CareGuardDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -25,24 +27,27 @@ const App = () => (
     <TooltipProvider>
       <AuthProvider>
         <PatientProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route path="/reception" element={<ReceptionPage />} />
-              <Route path="/admin" element={<AdminDashboard />} />
-              <Route path="/doctor" element={<DoctorPanel />} />
-              <Route path="/pharmacy" element={<PharmacyPage />} />
-              <Route path="/nurse" element={<NursePage />} />
-              <Route path="/billing" element={<BillingPage />} />
-              <Route path="/lab" element={<LabPage />} />
-              <Route path="/family/:patientId" element={<FamilyDashboard />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
+          <CareGuardProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<LandingPage />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/register" element={<RegisterPage />} />
+                <Route path="/reception" element={<ReceptionPage />} />
+                <Route path="/admin" element={<AdminDashboard />} />
+                <Route path="/careguard" element={<CareGuardDashboard />} />
+                <Route path="/doctor" element={<DoctorPanel />} />
+                <Route path="/pharmacy" element={<PharmacyPage />} />
+                <Route path="/nurse" element={<NursePage />} />
+                <Route path="/billing" element={<BillingPage />} />
+                <Route path="/lab" element={<LabPage />} />
+                <Route path="/family/:patientId" element={<FamilyDashboard />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </CareGuardProvider>
         </PatientProvider>
       </AuthProvider>
     </TooltipProvider>

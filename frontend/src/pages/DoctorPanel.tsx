@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { StaffLayout } from "@/components/StaffLayout";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { PatientWorkspace } from "@/components/patient/PatientWorkspace";
+import { CareGuardPanel } from "@/components/patient/CareGuardPanel";
 import { usePatients } from "@/contexts/PatientContext";
 import { isPatientActive } from "@/data/mockData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,17 +12,26 @@ import { cn } from "@/lib/utils";
 
 const DoctorPanel = () => {
   const { patients, getPatientById } = usePatients();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [params] = useSearchParams();
+  const [selectedId, setSelectedId] = useState<string | null>(params.get("patient"));
+
+  useEffect(() => {
+    const p = params.get("patient");
+    if (p) setSelectedId(p);
+  }, [params]);
 
   const activePatients = patients.filter(isPatientActive);
   const selected = selectedId ? getPatientById(selectedId) : undefined;
+  const defaultTab = (params.get("tab") as "overview" | "tests" | "medications" | undefined) || "overview";
 
   return (
     <StaffLayout allowedRoles={["doctor", "admin"]}>
       <PageHeader
         title="Doctor Workspace"
-        description="Open a patient to update the unified record — diagnosis, prescriptions, and tests."
+        description="Open a patient to update the unified record — CareGuard surfaces what needs review."
       />
+
+      <CareGuardPanel roleMode className="mb-6" compact />
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-1">
@@ -57,7 +68,7 @@ const DoctorPanel = () => {
 
         <div className="lg:col-span-3">
           {selected ? (
-            <PatientWorkspace patient={selected} role="doctor" />
+            <PatientWorkspace patient={selected} role="doctor" defaultTab={defaultTab} />
           ) : (
             <Card className="rounded-2xl shadow-card">
               <CardContent className="py-16 text-center">

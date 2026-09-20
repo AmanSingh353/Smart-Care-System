@@ -21,8 +21,32 @@ import {
   PRICE_CATALOG,
   DOCTORS,
   nowTime,
+  resetPatientIdCounter,
 } from "@/data/mockData";
 import { toast } from "sonner";
+
+const PATIENT_STORAGE = "scs30-patients";
+
+function loadPatients(): Patient[] {
+  try {
+    const raw = localStorage.getItem(PATIENT_STORAGE);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Patient[];
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {
+    /* ignore */
+  }
+  return initialPatients;
+}
+
+function persistPatients(patients: Patient[]) {
+  try {
+    localStorage.setItem(PATIENT_STORAGE, JSON.stringify(patients));
+  } catch {
+    /* ignore */
+  }
+}
 
 export interface RegisterPatientInput {
   name: string;
@@ -63,7 +87,18 @@ interface PatientContextType {
 
   /** Tests */
   addTest: (patientId: string, testName: string) => void;
-  updateTestStatus: (patientId: string, testId: string, status: TestStatus, result?: string) => void;
+  updateTestStatus: (
+    patientId: string,
+    testId: string,
+    status: TestStatus,
+    result?: string,
+    options?: { isCritical?: boolean }
+  ) => void;
+  markTestReviewed: (patientId: string, testId: string, reviewer?: string) => void;
+  markTestCritical: (patientId: string, testId: string, isCritical?: boolean) => void;
+
+  /** Demo */
+  resetDemoData: () => void;
 
   /** Nursing */
   addNursingUpdate: (patientId: string, note: string, nurseName?: string) => void;
@@ -100,11 +135,20 @@ const withNotification = (p: Patient, message: string, type?: string): Patient =
 });
 
 export const PatientProvider = ({ children }: { children: ReactNode }) => {
-  const [patients, setPatients] = useState<Patient[]>(initialPatients);
+  const [patients, setPatients] = useState<Patient[]>(() => loadPatients());
 
   const mutate = useCallback((id: string, updater: (p: Patient) => Patient) => {
     const key = normalizePatientId(id);
-    setPatients(prev => prev.map(p => (normalizePatientId(p.id) === key ? updater(p) : p)));
+    setPatients(prev => {
+      const next = prev.map(p => (normalizePatientId(p.id) === key ? updater(p) : p));
+      persistPatients(next);
+      return next;
+    });
+  }, []);
+
+  const setAllPatients = useCallback((next: Patient[]) => {
+    persistPatients(next);
+    setPatients(next);
   }, []);
 
   const getPatientById = useCallback(
@@ -175,7 +219,11 @@ export const PatientProvider = ({ children }: { children: ReactNode }) => {
       requests: [],
     };
 
-    setPatients(prev => [newPatient, ...prev]);
+    setPatients(prev => {
+      const next = [newPatient, ...prev];
+      persistPatients(next);
+      return next;
+    });
     toast.success(`Registered ${newPatient.id}`);
     return newPatient;
   };
@@ -284,6 +332,7 @@ export const PatientProvider = ({ children }: { children: ReactNode }) => {
       name: testName,
       status: "Pending",
       requestedAt: nowTime(),
+      requestedAtIso: new Date().toISOString(),
     };
     const unitPrice = getTestPrice(testName);
 
@@ -302,7 +351,13 @@ export const PatientProvider = ({ children }: { children: ReactNode }) => {
     toast.success(`Test "${testName}" requested`);
   };
 
-  const updateTestStatus = (patientId: string, testId: string, status: TestStatus, result?: string) => {
+  const updateTestStatus = (
+    patientId: string,
+    testId: string,
+    status: TestStatus,
+    result?: string,
+    options?: { isCritical?: boolean }
+  ) => {
     mutate(patientId, p => {
       const tests = p.tests.map(t =>
         t.id === testId
@@ -311,6 +366,12 @@ export const PatientProvider = ({ children }: { children: ReactNode }) => {
               status,
               result: result ?? t.result,
               completedAt: status === "Completed" ? nowTime() : t.completedAt,
+              isCritical:
+                options?.isCritical !== undefined
+                  ? options.isCritical
+                  : status === "Completed"
+                    ? t.isCritical
+                    : t.isCritical,
             }
           : t
       );
@@ -331,6 +392,39 @@ export const PatientProvider = ({ children }: { children: ReactNode }) => {
       return next;
     });
     toast.success(status === "Completed" ? "Test result saved" : `Test marked ${status}`);
+  };
+
+  const markTestReviewed = (patientId: string, testId: string, reviewer = "Assigned doctor") => {
+    mutate(patientId, p => {
+      const tests = p.tests.map(t =>
+        t.id === testId
+          ? { ...t, reviewedAt: nowTime(), reviewedBy: reviewer }
+          : t
+      );
+      const name = p.tests.find(t => t.id === testId)?.name;
+      return withNotification(
+        { ...p, tests },
+        `Your care team has reviewed your latest report${name ? ` (${name})` : ""}.`,
+        "family"
+      );
+    });
+    toast.success("Lab result marked as reviewed");
+  };
+
+  const markTestCritical = (patientId: string, testId: string, isCritical = true) => {
+    mutate(patientId, p => ({
+      ...p,
+      tests: p.tests.map(t => (t.id === testId ? { ...t, isCritical } : t)),
+    }));
+    toast.message(isCritical ? "Result flagged as critical for clinician review" : "Critical flag cleared");
+  };
+
+  const resetDemoData = () => {
+    resetPatientIdCounter(1008);
+    localStorage.removeItem(PATIENT_STORAGE);
+    localStorage.removeItem("scs30-careguard-signals");
+    setAllPatients(structuredClone(initialPatients));
+    toast.success("Demo patient data restored");
   };
 
   const addNursingUpdate = (patientId: string, note: string, nurseName = "Nurse on duty") => {
@@ -449,6 +543,8 @@ export const PatientProvider = ({ children }: { children: ReactNode }) => {
         markMedicineGiven,
         addTest,
         updateTestStatus,
+        markTestReviewed,
+        markTestCritical,
         addNursingUpdate,
         addNurseUpdate: addNursingUpdate,
         addBillingItem,
@@ -462,6 +558,7 @@ export const PatientProvider = ({ children }: { children: ReactNode }) => {
         updateFamilyRequestStatus,
         resolveFamilyRequest: (patientId, requestId, status) =>
           updateFamilyRequestStatus(patientId, requestId, status),
+        resetDemoData,
       }}
     >
       {children}
