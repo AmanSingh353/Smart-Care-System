@@ -1,6 +1,7 @@
-import React, { useState, ChangeEvent, FormEvent } from "react";
+import { useState, ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePatients } from "@/contexts/PatientContext";
+import { DOCTORS } from "@/data/mockData";
 import hospitalLogo from "@/assets/hospital-logo.png";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,12 +17,18 @@ const RegisterPage = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const doctor = DOCTORS[0];
     const patient = addPatient({
-      name: form.name,
-      age: parseInt(form.age),
+      name: form.name.trim(),
+      age: parseInt(form.age, 10) || 0,
       gender: form.gender,
-      mobile: form.mobile,
+      phone: form.mobile.trim(),
+      emergencyContact: "Not provided",
       visitType: form.visitType,
+      room: "",
+      bed: "",
+      assignedDoctor: doctor.name,
+      department: doctor.department,
     });
     setRegistered({ id: patient.id, time: new Date().toLocaleString("en-IN") });
   };

@@ -191,7 +191,7 @@ export const PatientProvider = ({ children }: { children: ReactNode }) => {
         diagnosis &&
         (p.treatmentStatus === "Registered" || p.treatmentStatus === "Admitted")
       ) {
-        next.treatmentStatus = "Under Treatment";
+        next = { ...next, treatmentStatus: "Under Treatment" };
       }
       return withNotification(next, "Doctor updated diagnosis", "treatment");
     });
@@ -234,7 +234,7 @@ export const PatientProvider = ({ children }: { children: ReactNode }) => {
         billItems: [...p.billItems, makeBillItem("medicine", `${med.name} ${med.dosage}`, unitPrice, qty)],
       };
       if (next.treatmentStatus === "Registered" || next.treatmentStatus === "Admitted") {
-        next.treatmentStatus = "Under Treatment";
+        next = { ...next, treatmentStatus: "Under Treatment" };
       }
       return withNotification(next, `New medicine prescribed: ${med.name}`, "medicine");
     });
