@@ -1,0 +1,19 @@
+{
+  "name": "smart-care-system",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Smart Care System — frontend + backend",
+  "scripts": {
+    "dev": "npm run dev --prefix frontend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:backend": "npm run dev --prefix backend",
+    "build": "npm run build --prefix frontend && npm run build --prefix backend",
+    "build:frontend": "npm run build --prefix frontend",
+    "build:backend": "npm run build --prefix backend",
+    "start": "npm run start --prefix backend",
+    "preview": "npm run preview --prefix frontend",
+    "typecheck": "npm run typecheck --prefix backend && npx --prefix frontend tsc --noEmit",
+    "test": "npm test --prefix frontend",
+    "lint": "npm run lint --prefix frontend"
+  }
+}

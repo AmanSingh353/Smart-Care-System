@@ -36,9 +36,9 @@ async function bootstrap() {
   await connectDatabase();
   initSocket(server);
 
-  server.listen(env.port, () => {
-    console.log(`[server] SCS30 backend listening on http://localhost:${env.port}`);
-    console.log(`[server] CORS allowed origin: ${env.clientUrl}`);
+  server.listen(env.port, env.host, () => {
+    console.log(`[server] Smart Care System API listening on ${env.host}:${env.port}`);
+    console.log(`[server] CORS / Socket.io origin: ${env.clientUrl}`);
   });
 }
 
