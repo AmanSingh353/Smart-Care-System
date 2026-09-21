@@ -56,7 +56,7 @@ const GROUP_LABELS: Record<StaffRole, { title: string; paths?: string[] }[]> = {
 export const StaffLayout = ({ children, allowedRoles }: { children: ReactNode; allowedRoles?: StaffRole[] }) => {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { role, staff, logout } = useAuth();
+  const { role, staff, logout, loading } = useAuth();
   const { patients } = usePatients();
   const { getRoleSignals } = useCareGuard();
 
@@ -65,6 +65,15 @@ export const StaffLayout = ({ children, allowedRoles }: { children: ReactNode; a
     [patients]
   );
   const careguardOpen = getRoleSignals(role).length;
+
+  // Wait for Firebase + session hydrate before treating missing role as logged-out
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">
+        Restoring session…
+      </div>
+    );
+  }
 
   if (!role || role === "family") {
     return <Navigate to="/login" replace />;

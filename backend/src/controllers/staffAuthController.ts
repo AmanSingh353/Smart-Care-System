@@ -43,6 +43,9 @@ export const staffAuthController = {
       if (!token) {
         return res.status(401).json({ error: "UNAUTHORIZED", message: "Missing Firebase ID token" });
       }
+      if (process.env.NODE_ENV === "development") {
+        console.info("[auth-diag] SESSION_REQUEST_STARTED");
+      }
       const { user, firebase } = await resolveStaffSession(token);
       return res.json({
         user: toPublicStaffUser(user),
@@ -50,6 +53,10 @@ export const staffAuthController = {
         firebase: { uid: firebase.uid, email: firebase.email },
       });
     } catch (err) {
+      if (process.env.NODE_ENV === "development") {
+        const code = err instanceof AuthError ? err.code : err instanceof Error ? err.message : "UNKNOWN";
+        console.info("[auth-diag] SESSION_RESPONSE_ERROR", { code });
+      }
       return handleAuthError(res, err);
     }
   },

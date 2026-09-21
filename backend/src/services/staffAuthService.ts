@@ -48,22 +48,58 @@ function assertAccountAccess(user: StaffUser) {
   }
 }
 
+function authDiag(event: string, detail?: Record<string, string | boolean | number | undefined>) {
+  if (env.nodeEnv !== "development") return;
+  if (detail) console.info(`[auth-diag] ${event}`, detail);
+  else console.info(`[auth-diag] ${event}`);
+}
+
 /** Resolve Smart Care System staff profile from a Firebase ID token. Role comes from DB only. */
 export async function resolveStaffSession(
   idToken: string
 ): Promise<{ user: StaffUser; firebase: { uid: string; email?: string } }> {
-  const decoded = await verifyIdToken(idToken);
+  let decoded;
+  try {
+    decoded = await verifyIdToken(idToken);
+    authDiag("BACKEND_TOKEN_VERIFICATION_SUCCESS", {
+      AUTHENTICATED_UID_PRESENT: Boolean(decoded.uid),
+    });
+  } catch (err: unknown) {
+    const code =
+      err && typeof err === "object" && "code" in err
+        ? String((err as { code: string }).code)
+        : err instanceof Error
+          ? err.message
+          : "UNKNOWN";
+    authDiag("BACKEND_TOKEN_VERIFICATION_ERROR_CODE", { code });
+    throw err;
+  }
+
   const uid = decoded.uid;
   const email = (decoded.email || "").toLowerCase();
 
   let user = await findByFirebaseUid(uid);
+  authDiag("STAFF_LOOKUP_BY_UID", { result: user ? "FOUND" : "NOT_FOUND" });
+
   if (!user && email) {
     user = await findByEmail(email);
+    authDiag("STAFF_LOOKUP_BY_EMAIL", { result: user ? "FOUND" : "NOT_FOUND" });
     if (user && !user.firebaseUid) {
       user = (await linkFirebaseUid(email, uid)) || user;
     } else if (user && user.firebaseUid && user.firebaseUid !== uid) {
       throw new AuthError("This account is linked to a different identity provider.", 403, "IDENTITY_MISMATCH");
     }
+  } else if (!user) {
+    authDiag("STAFF_LOOKUP_BY_EMAIL", { result: "SKIPPED_NO_EMAIL" });
+  }
+
+  const bootstrapMatch = isBootstrapAdminEmail(email);
+  authDiag("BOOTSTRAP_ADMIN_MATCH", { match: bootstrapMatch ? "TRUE" : "FALSE" });
+
+  // Recover existing Firebase Admin → SCS ADMIN mapping (bootstrap email only)
+  if (!user) {
+    user = await recoverBootstrapAdminSession(uid, email);
+    if (user) authDiag("BOOTSTRAP_ADMIN_RECOVERED", { STAFF_ROLE: user.role, STAFF_STATUS: user.status });
   }
 
   if (!user) {
@@ -82,6 +118,17 @@ export async function resolveStaffSession(
     );
   }
 
+  // Ensure bootstrap admin identity stays ADMIN + ACTIVE (never downgrade other roles here)
+  if (isBootstrapAdminEmail(email) && user.email === email) {
+    const patch: Partial<StaffUser> = {};
+    if (user.role !== "admin") patch.role = "admin";
+    if (user.status !== "ACTIVE") patch.status = "ACTIVE";
+    if (user.firebaseUid !== uid) patch.firebaseUid = uid;
+    if (Object.keys(patch).length) {
+      user = (await updateStaffUser(user.id, patch)) || user;
+    }
+  }
+
   assertAccountAccess(user);
 
   if (user.firebaseUid !== uid) {
@@ -90,7 +137,49 @@ export async function resolveStaffSession(
 
   user = (await touchLastLogin(user.id)) || user;
 
+  authDiag("SESSION_SUCCESS", { STAFF_ROLE: user.role, STAFF_STATUS: user.status });
+
   return { user, firebase: { uid, email: email || user.email } };
+}
+
+function isBootstrapAdminEmail(email: string): boolean {
+  const bootstrap = env.bootstrapAdminEmail;
+  return Boolean(bootstrap && email && email === bootstrap);
+}
+
+/**
+ * If the authenticated email is BOOTSTRAP_ADMIN_EMAIL and there is no usable Admin
+ * StaffUser yet (or only the bootstrap row needs creating), create/link exactly one ADMIN.
+ * Never promotes arbitrary emails. Does not touch Firebase Auth users/passwords.
+ */
+async function recoverBootstrapAdminSession(uid: string, email: string): Promise<StaffUser | null> {
+  if (!isBootstrapAdminEmail(email)) return null;
+
+  const existing = await findByEmail(email);
+  if (existing) {
+    const patch: Partial<StaffUser> = {
+      role: "admin",
+      status: "ACTIVE",
+      firebaseUid: uid,
+    };
+    return (await updateStaffUser(existing.id, patch)) || existing;
+  }
+
+  const activeAdmins = await countAdmins();
+  if (activeAdmins > 0) {
+    // Another Admin already exists — do not create a second bootstrap Admin
+    return null;
+  }
+
+  return createStaffUser({
+    email,
+    fullName: env.bootstrapAdminName,
+    role: "admin",
+    department: "Administration",
+    staffId: "ADM-BOOTSTRAP",
+    status: "ACTIVE",
+    firebaseUid: uid,
+  });
 }
 
 export async function createStaffAccount(input: {
@@ -189,57 +278,77 @@ export async function createStaffAccount(input: {
   }
 }
 
-/** Bootstrap first admin when none exists — uses BOOTSTRAP_ADMIN_EMAIL only. */
+/** Bootstrap first admin when none exists — uses BOOTSTRAP_ADMIN_EMAIL only.
+ * Never deletes/resets Firebase Admin unless BOOTSTRAP_ADMIN_PASSWORD is explicitly set
+ * (password update only). Prefer linking an existing Firebase user by email.
+ */
 export async function ensureBootstrapAdmin(): Promise<void> {
-  const admins = await countAdmins();
-  if (admins > 0) return;
-
   const email = env.bootstrapAdminEmail;
   if (!email) {
-    console.warn(
-      "[auth] No admin users and BOOTSTRAP_ADMIN_EMAIL not set — create an admin via Staff Management or env bootstrap"
-    );
-    return;
-  }
-
-  const existing = await findByEmail(email);
-  if (existing) {
-    if (existing.role !== "admin") {
-      await updateStaffUser(existing.id, { role: "admin", status: "ACTIVE" });
-      console.log(`[auth] Promoted ${email} to admin (bootstrap)`);
+    const admins = await countAdmins();
+    if (admins === 0) {
+      console.warn(
+        "[auth] No admin users and BOOTSTRAP_ADMIN_EMAIL not set — set BOOTSTRAP_ADMIN_EMAIL to your existing Firebase Admin email to restore Admin access"
+      );
     }
     return;
   }
 
-  let firebaseUid: string | null = null;
   const auth = getFirebaseAuth();
-  if (auth && env.bootstrapAdminPassword) {
+  let firebaseUid: string | null = null;
+  if (auth) {
     try {
-      const fb = await auth.createUser({
-        email,
-        password: env.bootstrapAdminPassword,
-        displayName: env.bootstrapAdminName,
-        emailVerified: true,
-      });
-      firebaseUid = fb.uid;
-      console.log(`[auth] Created Firebase bootstrap admin for ${email}`);
-    } catch (err: unknown) {
-      const code = err && typeof err === "object" && "code" in err ? String((err as { code: string }).code) : "";
-      if (code === "auth/email-already-exists") {
-        const u = await auth.getUserByEmail(email);
-        firebaseUid = u.uid;
+      const fbUser = await auth.getUserByEmail(email);
+      firebaseUid = fbUser.uid;
+      // Only set password when explicitly configured — never wipe existing Admin password by default
+      if (env.bootstrapAdminPassword) {
         await auth
-          .updateUser(u.uid, {
+          .updateUser(fbUser.uid, {
             password: env.bootstrapAdminPassword,
             displayName: env.bootstrapAdminName,
             disabled: false,
           })
           .catch(() => undefined);
-        console.log(`[auth] Linked existing Firebase user for bootstrap admin ${email}`);
+      }
+    } catch {
+      if (env.bootstrapAdminPassword) {
+        try {
+          const fb = await auth.createUser({
+            email,
+            password: env.bootstrapAdminPassword,
+            displayName: env.bootstrapAdminName,
+            emailVerified: true,
+          });
+          firebaseUid = fb.uid;
+          console.log(`[auth] Created Firebase bootstrap admin for ${email}`);
+        } catch (err: unknown) {
+          console.warn("[auth] Bootstrap Firebase user create skipped:", err);
+        }
       } else {
-        console.warn("[auth] Bootstrap Firebase user create skipped:", err);
+        console.warn(
+          `[auth] BOOTSTRAP_ADMIN_EMAIL=${email} has no Firebase Auth user yet — Admin can still be linked on first successful login`
+        );
       }
     }
+  }
+
+  const existing = await findByEmail(email);
+  if (existing) {
+    const patch: Partial<StaffUser> = {};
+    if (existing.role !== "admin") patch.role = "admin";
+    if (existing.status !== "ACTIVE") patch.status = "ACTIVE";
+    if (firebaseUid && existing.firebaseUid !== firebaseUid) patch.firebaseUid = firebaseUid;
+    if (Object.keys(patch).length) {
+      await updateStaffUser(existing.id, patch);
+      console.log(`[auth] Repaired bootstrap Admin StaffUser for ${email}`);
+    }
+    return;
+  }
+
+  const admins = await countAdmins();
+  if (admins > 0) {
+    console.log("[auth] Active Admin already exists — skipping new bootstrap StaffUser create");
+    return;
   }
 
   await createStaffUser({
@@ -251,7 +360,7 @@ export async function ensureBootstrapAdmin(): Promise<void> {
     status: "ACTIVE",
     firebaseUid,
   });
-  console.log(`[auth] Bootstrap admin record created for ${email} (password never stored in MongoDB)`);
+  console.log(`[auth] Bootstrap admin StaffUser created for ${email} (Firebase password unchanged)`);
 }
 
 export function authStatusPayload() {

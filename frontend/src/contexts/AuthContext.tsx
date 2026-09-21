@@ -17,6 +17,7 @@ import {
   isFirebaseClientConfigured,
   watchAuth,
 } from "@/lib/firebase";
+import { authDiag } from "@/lib/authDiag";
 
 export type { StaffRole };
 
@@ -101,10 +102,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const establishStaffSession = useCallback(
     async (forceRefresh = true) => {
       const token = await getIdToken(forceRefresh);
-      if (!token) throw new Error("No Firebase session");
-      const result = await authService.session(token);
-      applyStaff(result.user);
-      return result.user;
+      if (!token) {
+        authDiag("TOKEN_ACQUIRED", { ok: false });
+        throw new Error("No Firebase session");
+      }
+      authDiag("TOKEN_ACQUIRED", { ok: true });
+      authDiag("SESSION_REQUEST_STARTED");
+      try {
+        const result = await authService.session(token);
+        authDiag("SESSION_RESPONSE_STATUS", { status: 200 });
+        authDiag("SESSION_SUCCESS", {
+          STAFF_ROLE: result.user.role,
+          STAFF_STATUS: result.user.status,
+        });
+        applyStaff(result.user);
+        return result.user;
+      } catch (err) {
+        if (err instanceof ApiError) {
+          const body = err.body as { error?: string } | null;
+          authDiag("SESSION_RESPONSE_STATUS", { status: err.status });
+          authDiag("SESSION_RESPONSE_ERROR", { code: body?.error || err.message });
+        } else {
+          authDiag("SESSION_RESPONSE_ERROR", {
+            code: err instanceof Error ? err.message : "UNKNOWN",
+          });
+        }
+        throw err;
+      }
     },
     [applyStaff]
   );
@@ -172,7 +196,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [establishStaffSession, firebaseReady]);
 
   const loginStaffEmailPassword = async (email: string, password: string) => {
-    await firebaseSignInEmailPassword(email, password);
+    authDiag("FIREBASE_LOGIN_STARTED", { email: email.trim().toLowerCase() });
+    try {
+      await firebaseSignInEmailPassword(email, password);
+      authDiag("FIREBASE_LOGIN_SUCCESS");
+    } catch (err) {
+      const code =
+        err && typeof err === "object" && "code" in err
+          ? String((err as { code: string }).code)
+          : err instanceof Error
+            ? err.message
+            : "UNKNOWN";
+      authDiag("FIREBASE_LOGIN_ERROR_CODE", { code });
+      throw err;
+    }
     return establishStaffSession(true);
   };
 
@@ -237,21 +274,35 @@ export const useAuth = () => {
 };
 
 export function formatAuthError(err: unknown): string {
+  const isDev = Boolean(import.meta.env.DEV);
+
   if (err instanceof ApiError) {
     const body = err.body as { error?: string; message?: string } | null;
     const code = body?.error || "";
     if (code === "ACCOUNT_DISABLED") return "Account disabled. Contact your administrator.";
     if (code === "ACCOUNT_SUSPENDED") return "Account suspended. Contact your administrator.";
     if (code === "ACCOUNT_INVITED") return "Account invited but not activated yet.";
-    if (code === "NOT_REGISTERED") return err.message;
-    if (code === "FIREBASE_NOT_CONFIGURED") return "Backend authentication is unavailable. Firebase Admin is not configured.";
-    if (err.status === 0 || err.status >= 500) return err.message || "Backend unavailable. Try again later.";
-    return err.message;
+    if (code === "NOT_REGISTERED") {
+      return isDev ? `Staff account not found (${code}).` : err.message;
+    }
+    if (code === "FIREBASE_NOT_CONFIGURED") {
+      return isDev
+        ? "Firebase Admin configuration error — backend cannot verify ID tokens."
+        : "Backend authentication is unavailable. Firebase Admin is not configured.";
+    }
+    if (err.status === 0 || err.status >= 500) {
+      return isDev
+        ? `Backend authentication failed (${err.status}${code ? `: ${code}` : ""}).`
+        : err.message || "Backend unavailable. Try again later.";
+    }
+    return isDev ? `Backend authentication failed: ${err.message}` : err.message;
   }
   if (err && typeof err === "object" && "code" in err) {
     const code = String((err as { code: string }).code);
     if (code === "auth/invalid-credential" || code === "auth/wrong-password" || code === "auth/invalid-login-credentials") {
-      return "Invalid credentials. Check your email and password.";
+      return isDev
+        ? `Firebase authentication failed (${code}). Email/password rejected by Firebase.`
+        : "Invalid credentials. Check your email and password.";
     }
     if (code === "auth/user-not-found") return "Account not found for this email.";
     if (code === "auth/user-disabled") return "Account disabled in Firebase Authentication.";
@@ -259,6 +310,7 @@ export function formatAuthError(err: unknown): string {
     if (code === "auth/popup-closed-by-user") return "Google sign-in was cancelled.";
     if (code === "auth/invalid-email") return "Enter a valid email address.";
     if (code === "auth/network-request-failed") return "Firebase unavailable. Check your network connection.";
+    if (isDev) return `Firebase authentication failed (${code}).`;
   }
   if (err instanceof Error) {
     if (/Firebase client is not configured/i.test(err.message)) {
