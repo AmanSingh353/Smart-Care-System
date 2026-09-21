@@ -77,6 +77,11 @@ export const authService = {
     api.patch<{ user: StaffProfile }>(`/api/auth/staff/${id}`, body, {
       Authorization: `Bearer ${idToken}`,
     }),
+
+  deleteStaff: (idToken: string, id: string) =>
+    api.delete<{ message: string; id: string }>(`/api/auth/staff/${id}`, {
+      Authorization: `Bearer ${idToken}`,
+    }),
 };
 
 export default authService;

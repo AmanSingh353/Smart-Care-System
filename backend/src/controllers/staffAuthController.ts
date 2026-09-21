@@ -7,7 +7,7 @@ import {
   resolveStaffSession,
   toPublicStaffUser,
 } from "../services/staffAuthService";
-import { updateStaffUser, findById } from "../services/userStore";
+import { updateStaffUser, findById, deleteStaffUser } from "../services/userStore";
 import { getFirebaseAuth } from "../config/firebaseAdmin";
 import { normalizeStaffRole, normalizeStaffStatus } from "../models/User";
 
@@ -153,6 +153,32 @@ export const staffAuthController = {
       }
 
       return res.json({ user: updated ? toPublicStaffUser(updated) : null });
+    } catch (err) {
+      return handleAuthError(res, err);
+    }
+  },
+
+  async deleteStaff(req: Request, res: Response) {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const id = String(req.params.id || "");
+      const existing = await findById(id);
+      if (!existing) {
+        return res.status(404).json({ error: "NOT_FOUND", message: "Staff user not found" });
+      }
+      if (req.user?.userId && req.user.userId === id) {
+        return res.status(400).json({ error: "CANNOT_DELETE_SELF", message: "You cannot delete your own account" });
+      }
+      if (existing.firebaseUid) {
+        const auth = getFirebaseAuth();
+        if (auth) {
+          await auth.deleteUser(existing.firebaseUid).catch(async () => {
+            await auth.updateUser(existing.firebaseUid!, { disabled: true }).catch(() => undefined);
+          });
+        }
+      }
+      await deleteStaffUser(id);
+      return res.json({ message: "Staff account deleted", id });
     } catch (err) {
       return handleAuthError(res, err);
     }

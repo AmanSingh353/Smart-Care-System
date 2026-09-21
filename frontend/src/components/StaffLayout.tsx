@@ -35,6 +35,7 @@ const iconMap: Record<string, typeof LayoutDashboard> = {
   Laboratory: FlaskConical,
   Lab: FlaskConical,
   CareGuard: Shield,
+  "Staff Management": Users,
 };
 
 const GROUP_LABELS: Record<StaffRole, { title: string; paths?: string[] }[]> = {
@@ -42,7 +43,7 @@ const GROUP_LABELS: Record<StaffRole, { title: string; paths?: string[] }[]> = {
     { title: "Overview", paths: ["/admin", "/careguard"] },
     { title: "Clinical", paths: ["/doctor", "/nurse"] },
     { title: "Diagnostics", paths: ["/lab", "/pharmacy"] },
-    { title: "Operations", paths: ["/reception", "/billing"] },
+    { title: "Operations", paths: ["/reception", "/billing", "/admin/staff"] },
   ],
   reception: [{ title: "Front desk" }],
   doctor: [{ title: "Clinical", paths: ["/doctor", "/careguard"] }],
@@ -91,7 +92,10 @@ export const StaffLayout = ({ children, allowedRoles }: { children: ReactNode; a
             </p>
             <div className="space-y-0.5">
               {items.map(item => {
-                const active = location.pathname === item.path;
+                const active =
+                  item.path === "/admin"
+                    ? location.pathname === "/admin"
+                    : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
                 const Icon = iconMap[item.label] || LayoutDashboard;
                 return (
                   <Link

@@ -23,7 +23,7 @@ import { useMemo, useState } from "react";
 import { StaffLayout } from "@/components/StaffLayout";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { StatCard } from "@/components/dashboard/StatCard";
-import { StaffManagement } from "@/components/admin/StaffManagement";
+import { StaffQuickAccessCard } from "@/components/admin/StaffManagement";
 
 const AdminDashboard = () => {
   const { patients, getPatientById, updateFamilyRequestStatus, resetDemoData } = usePatients();
@@ -109,8 +109,6 @@ const AdminDashboard = () => {
         description="Live overview derived from the shared patient record across every department."
       />
 
-      <StaffManagement />
-
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
         <StatCard label="Total patients" value={patients.length} icon={Users} />
         <StatCard label="Active / admitted" value={activePatients.length} icon={Activity} hint="Not discharged" />
@@ -179,6 +177,10 @@ const AdminDashboard = () => {
           </Button>
         </CardContent>
       </Card>
+
+      <div className="mb-6">
+        <StaffQuickAccessCard />
+      </div>
 
       {delayedPatients.length > 0 && (
         <Card className="rounded-2xl shadow-card mb-6 border-warning/30">

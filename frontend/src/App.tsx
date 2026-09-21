@@ -11,6 +11,7 @@ import LandingPage from "./pages/LandingPage";
 import RegisterPage from "./pages/RegisterPage";
 import ReceptionPage from "./pages/ReceptionPage";
 import AdminDashboard from "./pages/AdminDashboard";
+import StaffManagementPage from "./pages/StaffManagementPage";
 import DoctorPanel from "./pages/DoctorPanel";
 import PharmacyPage from "./pages/PharmacyPage";
 import NursePage from "./pages/NursePage";
@@ -37,6 +38,7 @@ const App = () => (
                 <Route path="/register" element={<RegisterPage />} />
                 <Route path="/reception" element={<ReceptionPage />} />
                 <Route path="/admin" element={<AdminDashboard />} />
+                <Route path="/admin/staff" element={<StaffManagementPage />} />
                 <Route path="/careguard" element={<CareGuardDashboard />} />
                 <Route path="/doctor" element={<DoctorPanel />} />
                 <Route path="/pharmacy" element={<PharmacyPage />} />

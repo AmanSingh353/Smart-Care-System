@@ -12,5 +12,6 @@ router.get("/staff", requireAuth, requireStaff, staffAuthController.listStaff);
 router.get("/staff/:id", requireAuth, requireStaff, staffAuthController.getStaff);
 router.post("/staff", requireAuth, requireStaff, staffAuthController.createStaff);
 router.patch("/staff/:id", requireAuth, requireStaff, staffAuthController.updateStaff);
+router.delete("/staff/:id", requireAuth, requireStaff, staffAuthController.deleteStaff);
 
 export default router;

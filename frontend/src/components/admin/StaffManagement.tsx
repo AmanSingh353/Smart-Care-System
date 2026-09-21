@@ -1,8 +1,24 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuth, formatAuthError } from "@/contexts/AuthContext";
 import {
   authService,
@@ -10,10 +26,12 @@ import {
   type StaffProfile,
   type StaffRole,
 } from "@/services/authService";
-import { Users } from "lucide-react";
+import { MoreHorizontal, Plus, Search, Users } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const CREATABLE_ROLES: StaffRole[] = ["doctor", "nurse", "lab", "pharmacy", "billing", "reception", "admin"];
-const STATUSES: StaffAccountStatus[] = ["INVITED", "ACTIVE", "SUSPENDED", "DISABLED"];
+const FILTER_ROLES: Array<StaffRole | "all"> = ["all", ...CREATABLE_ROLES];
+const FILTER_STATUSES: Array<StaffAccountStatus | "all"> = ["all", "ACTIVE", "INVITED", "SUSPENDED", "DISABLED"];
 
 const emptyForm = {
   fullName: "",
@@ -27,18 +45,35 @@ const emptyForm = {
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleString();
+    return new Date(iso).toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   } catch {
     return iso;
   }
 }
 
+function statusVariant(status: StaffAccountStatus): "default" | "secondary" | "destructive" | "outline" {
+  if (status === "ACTIVE") return "default";
+  if (status === "INVITED") return "secondary";
+  if (status === "SUSPENDED") return "outline";
+  return "destructive";
+}
+
 export function StaffManagement() {
   const { getAccessToken } = useAuth();
   const [staff, setStaff] = useState<StaffProfile[]>([]);
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState<StaffRole | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<StaffAccountStatus | "all">("all");
   const [form, setForm] = useState(emptyForm);
-  const [editing, setEditing] = useState<StaffProfile | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
   const [viewing, setViewing] = useState<StaffProfile | null>(null);
+  const [editing, setEditing] = useState<StaffProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -54,13 +89,37 @@ export function StaffManagement() {
     refresh().catch(err => setError(formatAuthError(err)));
   }, [refresh]);
 
-  const validateForm = () => {
-    if (!form.fullName.trim()) return "Full name is required.";
-    if (!form.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+  const summary = useMemo(() => {
+    return {
+      total: staff.length,
+      active: staff.filter(s => s.status === "ACTIVE").length,
+      suspended: staff.filter(s => s.status === "SUSPENDED").length,
+      disabled: staff.filter(s => s.status === "DISABLED").length,
+      invited: staff.filter(s => s.status === "INVITED").length,
+    };
+  }, [staff]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return staff.filter(u => {
+      if (roleFilter !== "all" && u.role !== roleFilter) return false;
+      if (statusFilter !== "all" && u.status !== statusFilter) return false;
+      if (!q) return true;
+      return (
+        u.fullName.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        u.staffId.toLowerCase().includes(q)
+      );
+    });
+  }, [staff, search, roleFilter, statusFilter]);
+
+  const validateForm = (data: typeof emptyForm) => {
+    if (!data.fullName.trim()) return "Full name is required.";
+    if (!data.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email.trim())) {
       return "Enter a valid email address.";
     }
-    if (!form.staffId.trim()) return "Staff ID is required.";
-    if (!CREATABLE_ROLES.includes(form.role)) return "Select a valid role.";
+    if (!data.staffId.trim()) return "Staff ID is required.";
+    if (!CREATABLE_ROLES.includes(data.role)) return "Select a valid role.";
     return null;
   };
 
@@ -68,7 +127,7 @@ export function StaffManagement() {
     e.preventDefault();
     setError(null);
     setMessage(null);
-    const v = validateForm();
+    const v = validateForm(form);
     if (v) {
       setError(v);
       return;
@@ -86,10 +145,11 @@ export function StaffManagement() {
         status: form.status,
       });
       const parts = [res.message];
-      if (res.temporaryPassword) parts.push(`Temporary password (share securely, not stored): ${res.temporaryPassword}`);
-      if (res.passwordResetLink) parts.push(`Password reset link available — share securely with the staff member.`);
+      if (res.temporaryPassword) parts.push(`Temporary password (share securely): ${res.temporaryPassword}`);
+      if (res.passwordResetLink) parts.push("Password reset link generated — share securely.");
       setMessage(parts.join(" "));
       setForm(emptyForm);
+      setAddOpen(false);
       await refresh();
     } catch (err) {
       setError(formatAuthError(err));
@@ -114,6 +174,27 @@ export function StaffManagement() {
     }
   };
 
+  const onDelete = async (user: StaffProfile) => {
+    if (
+      !window.confirm(
+        `Delete ${user.fullName} (${user.email})?\n\nThis removes the Smart Care System staff record and attempts to remove the Firebase Auth user.`
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Not authenticated");
+      await authService.deleteStaff(token, user.id);
+      setMessage(`${user.fullName} deleted`);
+      setViewing(null);
+      await refresh();
+    } catch (err) {
+      setError(formatAuthError(err));
+    }
+  };
+
   const saveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editing) return;
@@ -129,7 +210,7 @@ export function StaffManagement() {
         staffId: editing.staffId,
         status: editing.status,
       });
-      setMessage("Staff record updated. Role changes apply on next session refresh / login.");
+      setMessage("Staff record updated.");
       setEditing(null);
       await refresh();
     } catch (err) {
@@ -139,130 +220,262 @@ export function StaffManagement() {
     }
   };
 
-  return (
-    <Card className="rounded-2xl shadow-card mb-6">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base font-semibold flex items-center gap-2">
-          <Users className="h-4 w-4 text-primary" />
-          Staff Management
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <form onSubmit={onCreate} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <Label>Full Name</Label>
-            <Input
-              className="mt-1 rounded-xl"
-              value={form.fullName}
-              onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))}
-              required
-            />
-          </div>
-          <div>
-            <Label>Email</Label>
-            <Input
-              type="email"
-              className="mt-1 rounded-xl"
-              value={form.email}
-              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-              required
-            />
-          </div>
-          <div>
-            <Label>Role</Label>
-            <select
-              className="w-full mt-1 h-10 rounded-xl border border-input bg-background px-3 text-sm"
-              value={form.role}
-              onChange={e => setForm(f => ({ ...f, role: e.target.value as StaffRole }))}
-            >
-              {CREATABLE_ROLES.map(r => (
-                <option key={r} value={r}>
-                  {r.toUpperCase()}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <Label>Department</Label>
-            <Input
-              className="mt-1 rounded-xl"
-              value={form.department}
-              onChange={e => setForm(f => ({ ...f, department: e.target.value }))}
-            />
-          </div>
-          <div>
-            <Label>Staff ID</Label>
-            <Input
-              className="mt-1 rounded-xl"
-              placeholder="DOC-002"
-              value={form.staffId}
-              onChange={e => setForm(f => ({ ...f, staffId: e.target.value }))}
-              required
-            />
-          </div>
-          <div>
-            <Label>Status</Label>
-            <select
-              className="w-full mt-1 h-10 rounded-xl border border-input bg-background px-3 text-sm"
-              value={form.status}
-              onChange={e => setForm(f => ({ ...f, status: e.target.value as StaffAccountStatus }))}
-            >
-              {STATUSES.map(s => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
-            <Button type="submit" disabled={busy}>
-              {busy ? "Creating…" : "Create staff account"}
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              Backend creates Firebase Auth identity + Smart Care System record. Passwords are never stored in MongoDB.
-            </p>
-          </div>
-        </form>
-
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        {message && <p className="text-sm text-foreground bg-muted/50 rounded-xl px-3 py-2 break-all">{message}</p>}
-
-        {viewing && (
-          <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm space-y-1">
-            <div className="flex justify-between gap-2">
-              <p className="font-semibold">View — {viewing.fullName}</p>
-              <Button type="button" size="sm" variant="ghost" onClick={() => setViewing(null)}>
-                Close
-              </Button>
-            </div>
-            <p>Email: {viewing.email}</p>
-            <p>Role: {viewing.role.toUpperCase()}</p>
-            <p>Department: {viewing.department || "—"}</p>
-            <p>Staff ID: {viewing.staffId}</p>
-            <p>Status: {viewing.status}</p>
-            <p>Created: {fmtDate(viewing.createdAt)}</p>
-            <p>Last login: {fmtDate(viewing.lastLoginAt)}</p>
-            <p className="text-xs text-muted-foreground">Firebase UID: {viewing.firebaseUid || "not linked"}</p>
-          </div>
+  const ActionMenu = ({ user }: { user: StaffProfile }) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" aria-label="More actions">
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        {user.status !== "ACTIVE" && (
+          <DropdownMenuItem onClick={() => setStatus(user, "ACTIVE")}>Activate</DropdownMenuItem>
         )}
+        {user.status !== "SUSPENDED" && user.status !== "DISABLED" && (
+          <DropdownMenuItem onClick={() => setStatus(user, "SUSPENDED")}>Suspend</DropdownMenuItem>
+        )}
+        {user.status !== "DISABLED" && (
+          <DropdownMenuItem onClick={() => setStatus(user, "DISABLED")}>Disable</DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onDelete(user)}>
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 
-        {editing && (
-          <form onSubmit={saveEdit} className="rounded-xl border border-border p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <p className="sm:col-span-2 font-semibold text-sm">Edit — {editing.email}</p>
-            <div>
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-1 min-w-0">
+          <div className="relative flex-1 min-w-0 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              className="pl-9 h-10 rounded-xl"
+              placeholder="Search staff..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <select
+            className="h-10 rounded-xl border border-input bg-background px-3 text-sm min-w-[8.5rem]"
+            value={roleFilter}
+            onChange={e => setRoleFilter(e.target.value as StaffRole | "all")}
+            aria-label="Filter by role"
+          >
+            {FILTER_ROLES.map(r => (
+              <option key={r} value={r}>
+                {r === "all" ? "All Roles" : r.charAt(0).toUpperCase() + r.slice(1)}
+              </option>
+            ))}
+          </select>
+          <select
+            className="h-10 rounded-xl border border-input bg-background px-3 text-sm min-w-[8.5rem]"
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value as StaffAccountStatus | "all")}
+            aria-label="Filter by status"
+          >
+            {FILTER_STATUSES.map(s => (
+              <option key={s} value={s}>
+                {s === "all" ? "All Status" : s.charAt(0) + s.slice(1).toLowerCase()}
+              </option>
+            ))}
+          </select>
+        </div>
+        <Button type="button" className="gap-1.5 shrink-0" onClick={() => setAddOpen(true)}>
+          <Plus className="h-4 w-4" />
+          Add Staff
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="rounded-2xl shadow-card">
+          <CardContent className="pt-4 pb-4">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Total Staff</p>
+            <p className="text-2xl font-bold tabular-nums mt-1">{summary.total}</p>
+          </CardContent>
+        </Card>
+        <Card className="rounded-2xl shadow-card">
+          <CardContent className="pt-4 pb-4">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Active</p>
+            <p className="text-2xl font-bold tabular-nums mt-1">{summary.active}</p>
+          </CardContent>
+        </Card>
+        <Card className="rounded-2xl shadow-card">
+          <CardContent className="pt-4 pb-4">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Suspended</p>
+            <p className="text-2xl font-bold tabular-nums mt-1">{summary.suspended}</p>
+          </CardContent>
+        </Card>
+        <Card className="rounded-2xl shadow-card">
+          <CardContent className="pt-4 pb-4">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Disabled</p>
+            <p className="text-2xl font-bold tabular-nums mt-1">{summary.disabled}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      {message && <p className="text-sm text-foreground bg-muted/50 rounded-xl px-3 py-2 break-all">{message}</p>}
+
+      {/* Desktop / tablet table */}
+      <Card className="rounded-2xl shadow-card hidden md:block overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm table-fixed min-w-[960px]">
+            <colgroup>
+              <col className="w-[14%]" />
+              <col className="w-[18%]" />
+              <col className="w-[9%]" />
+              <col className="w-[12%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className="w-[11%]" />
+              <col className="w-[11%]" />
+              <col className="w-[7%]" />
+            </colgroup>
+            <thead>
+              <tr className="border-b border-border text-left text-muted-foreground bg-muted/30">
+                <th className="px-4 py-3 font-medium">Name</th>
+                <th className="px-3 py-3 font-medium">Email</th>
+                <th className="px-3 py-3 font-medium">Role</th>
+                <th className="px-3 py-3 font-medium">Department</th>
+                <th className="px-3 py-3 font-medium">Staff ID</th>
+                <th className="px-3 py-3 font-medium">Status</th>
+                <th className="px-3 py-3 font-medium">Created</th>
+                <th className="px-3 py-3 font-medium">Last Login</th>
+                <th className="px-3 py-3 font-medium text-right whitespace-nowrap">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(u => (
+                <tr key={u.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20">
+                  <td className="px-4 py-3 font-medium text-foreground truncate" title={u.fullName}>
+                    {u.fullName}
+                  </td>
+                  <td className="px-3 py-3 text-muted-foreground truncate" title={u.email}>
+                    {u.email}
+                  </td>
+                  <td className="px-3 py-3 uppercase text-xs font-semibold tracking-wide">{u.role}</td>
+                  <td className="px-3 py-3 text-muted-foreground truncate" title={u.department || undefined}>
+                    {u.department || "—"}
+                  </td>
+                  <td className="px-3 py-3 font-medium text-primary whitespace-nowrap">{u.staffId}</td>
+                  <td className="px-3 py-3">
+                    <Badge variant={statusVariant(u.status)} className="text-[10px] font-semibold">
+                      {u.status}
+                    </Badge>
+                  </td>
+                  <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(u.createdAt)}</td>
+                  <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(u.lastLoginAt)}</td>
+                  <td className="px-3 py-3">
+                    <div className="flex items-center justify-end gap-0.5 whitespace-nowrap">
+                      <Button type="button" size="sm" variant="ghost" className="h-8 px-2" onClick={() => setViewing(u)}>
+                        View
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 px-2"
+                        onClick={() => setEditing({ ...u })}
+                      >
+                        Edit
+                      </Button>
+                      <ActionMenu user={u} />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="px-4 py-10 text-center text-muted-foreground">
+                    No staff match your search or filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Mobile cards */}
+      <div className="md:hidden space-y-3">
+        {filtered.map(u => (
+          <Card key={u.id} className="rounded-2xl shadow-card">
+            <CardContent className="pt-4 pb-4 space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-semibold text-foreground truncate">{u.fullName}</p>
+                  <p className="text-sm text-muted-foreground truncate">{u.email}</p>
+                </div>
+                <Badge variant={statusVariant(u.status)} className="shrink-0 text-[10px]">
+                  {u.status}
+                </Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <p className="text-[10px] uppercase text-muted-foreground">Role</p>
+                  <p className="font-medium uppercase text-xs">{u.role}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-muted-foreground">Staff ID</p>
+                  <p className="font-medium text-primary">{u.staffId}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-[10px] uppercase text-muted-foreground">Department</p>
+                  <p className="font-medium">{u.department || "—"}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <Button type="button" size="sm" variant="outline" className="flex-1" onClick={() => setViewing(u)}>
+                  View
+                </Button>
+                <ActionMenu user={u} />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+        {filtered.length === 0 && (
+          <p className="text-sm text-muted-foreground text-center py-8">No staff match your search or filters.</p>
+        )}
+      </div>
+
+      {/* Add Staff dialog */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="sm:max-w-lg rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Add Staff</DialogTitle>
+            <DialogDescription>
+              Creates a Firebase Auth identity and Smart Care System staff record. Passwords are never stored in MongoDB.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={onCreate} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="sm:col-span-2">
               <Label>Full Name</Label>
               <Input
                 className="mt-1 rounded-xl"
-                value={editing.fullName}
-                onChange={e => setEditing({ ...editing, fullName: e.target.value })}
+                value={form.fullName}
+                onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))}
+                required
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                className="mt-1 rounded-xl"
+                value={form.email}
+                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                required
               />
             </div>
             <div>
               <Label>Role</Label>
               <select
                 className="w-full mt-1 h-10 rounded-xl border border-input bg-background px-3 text-sm"
-                value={editing.role}
-                onChange={e => setEditing({ ...editing, role: e.target.value as StaffRole })}
+                value={form.role}
+                onChange={e => setForm(f => ({ ...f, role: e.target.value as StaffRole }))}
               >
                 {CREATABLE_ROLES.map(r => (
                   <option key={r} value={r}>
@@ -272,109 +485,239 @@ export function StaffManagement() {
               </select>
             </div>
             <div>
-              <Label>Department</Label>
-              <Input
-                className="mt-1 rounded-xl"
-                value={editing.department}
-                onChange={e => setEditing({ ...editing, department: e.target.value })}
-              />
-            </div>
-            <div>
               <Label>Staff ID</Label>
               <Input
                 className="mt-1 rounded-xl"
-                value={editing.staffId}
-                onChange={e => setEditing({ ...editing, staffId: e.target.value })}
+                placeholder="DOC-002"
+                value={form.staffId}
+                onChange={e => setForm(f => ({ ...f, staffId: e.target.value }))}
+                required
               />
             </div>
-            <div>
-              <Label>Status</Label>
-              <select
-                className="w-full mt-1 h-10 rounded-xl border border-input bg-background px-3 text-sm"
-                value={editing.status}
-                onChange={e => setEditing({ ...editing, status: e.target.value as StaffAccountStatus })}
-              >
-                {STATUSES.map(s => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
+            <div className="sm:col-span-2">
+              <Label>Department</Label>
+              <Input
+                className="mt-1 rounded-xl"
+                value={form.department}
+                onChange={e => setForm(f => ({ ...f, department: e.target.value }))}
+              />
             </div>
-            <div className="sm:col-span-2 flex gap-2">
-              <Button type="submit" disabled={busy}>
-                Save
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setEditing(null)}>
+            <DialogFooter className="sm:col-span-2 gap-2">
+              <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>
                 Cancel
               </Button>
-            </div>
+              <Button type="submit" disabled={busy}>
+                {busy ? "Creating…" : "Create staff"}
+              </Button>
+            </DialogFooter>
           </form>
-        )}
+        </DialogContent>
+      </Dialog>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-muted-foreground">
-                <th className="pb-2 font-medium">Name</th>
-                <th className="pb-2 font-medium">Email</th>
-                <th className="pb-2 font-medium">Role</th>
-                <th className="pb-2 font-medium hidden md:table-cell">Department</th>
-                <th className="pb-2 font-medium">Staff ID</th>
-                <th className="pb-2 font-medium">Status</th>
-                <th className="pb-2 font-medium hidden lg:table-cell">Created</th>
-                <th className="pb-2 font-medium hidden lg:table-cell">Last login</th>
-                <th className="pb-2 font-medium text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {staff.map(u => (
-                <tr key={u.id} className="border-b border-border/50 last:border-0">
-                  <td className="py-2 font-medium">{u.fullName}</td>
-                  <td className="py-2 text-muted-foreground">{u.email}</td>
-                  <td className="py-2 uppercase text-xs font-semibold">{u.role}</td>
-                  <td className="py-2 hidden md:table-cell text-muted-foreground">{u.department || "—"}</td>
-                  <td className="py-2 text-primary font-medium">{u.staffId}</td>
-                  <td className="py-2 text-xs">{u.status}</td>
-                  <td className="py-2 hidden lg:table-cell text-xs text-muted-foreground">{fmtDate(u.createdAt)}</td>
-                  <td className="py-2 hidden lg:table-cell text-xs text-muted-foreground">{fmtDate(u.lastLoginAt)}</td>
-                  <td className="py-2 text-right">
-                    <div className="inline-flex flex-wrap justify-end gap-1">
-                      <Button type="button" size="sm" variant="ghost" onClick={() => setViewing(u)}>
-                        View
-                      </Button>
-                      <Button type="button" size="sm" variant="ghost" onClick={() => setEditing({ ...u })}>
-                        Edit
-                      </Button>
-                      {u.status !== "ACTIVE" && (
-                        <Button type="button" size="sm" variant="ghost" onClick={() => setStatus(u, "ACTIVE")}>
-                          Activate
-                        </Button>
-                      )}
-                      {u.status !== "SUSPENDED" && u.status !== "DISABLED" && (
-                        <Button type="button" size="sm" variant="ghost" onClick={() => setStatus(u, "SUSPENDED")}>
-                          Suspend
-                        </Button>
-                      )}
-                      {u.status !== "DISABLED" && (
-                        <Button type="button" size="sm" variant="ghost" onClick={() => setStatus(u, "DISABLED")}>
-                          Disable
-                        </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {staff.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="py-4 text-muted-foreground">
-                    No staff records yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+      {/* View dialog */}
+      <Dialog open={!!viewing} onOpenChange={open => !open && setViewing(null)}>
+        <DialogContent className="sm:max-w-md rounded-2xl">
+          {viewing && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{viewing.fullName}</DialogTitle>
+                <DialogDescription>Staff account details</DialogDescription>
+              </DialogHeader>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="col-span-2">
+                  <p className="text-[10px] uppercase text-muted-foreground font-semibold">Email</p>
+                  <p className="font-medium break-all">{viewing.email}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-muted-foreground font-semibold">Role</p>
+                  <p className="font-medium uppercase">{viewing.role}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-muted-foreground font-semibold">Staff ID</p>
+                  <p className="font-medium text-primary">{viewing.staffId}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-muted-foreground font-semibold">Department</p>
+                  <p className="font-medium">{viewing.department || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-muted-foreground font-semibold">Status</p>
+                  <Badge variant={statusVariant(viewing.status)} className="mt-0.5">
+                    {viewing.status}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-muted-foreground font-semibold">Created</p>
+                  <p className="font-medium text-xs">{fmtDate(viewing.createdAt)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-muted-foreground font-semibold">Last login</p>
+                  <p className="font-medium text-xs">{fmtDate(viewing.lastLoginAt)}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-[10px] uppercase text-muted-foreground font-semibold">Authentication</p>
+                  <p className="font-medium text-xs">
+                    {viewing.firebaseUid ? `Linked (UID ${viewing.firebaseUid.slice(0, 8)}…)` : "Not linked to Firebase yet"}
+                  </p>
+                </div>
+              </div>
+              <DialogFooter className="flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setEditing({ ...viewing });
+                    setViewing(null);
+                  }}
+                >
+                  Edit
+                </Button>
+                {viewing.status !== "ACTIVE" && (
+                  <Button type="button" variant="outline" onClick={() => setStatus(viewing, "ACTIVE")}>
+                    Activate
+                  </Button>
+                )}
+                {viewing.status === "ACTIVE" && (
+                  <Button type="button" variant="outline" onClick={() => setStatus(viewing, "SUSPENDED")}>
+                    Suspend
+                  </Button>
+                )}
+                {viewing.status !== "DISABLED" && (
+                  <Button type="button" variant="outline" onClick={() => setStatus(viewing, "DISABLED")}>
+                    Disable
+                  </Button>
+                )}
+                <Button type="button" variant="destructive" onClick={() => onDelete(viewing)}>
+                  Delete
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit dialog */}
+      <Dialog open={!!editing} onOpenChange={open => !open && setEditing(null)}>
+        <DialogContent className="sm:max-w-lg rounded-2xl">
+          {editing && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Edit staff</DialogTitle>
+                <DialogDescription>{editing.email}</DialogDescription>
+              </DialogHeader>
+              <form onSubmit={saveEdit} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2">
+                  <Label>Full Name</Label>
+                  <Input
+                    className="mt-1 rounded-xl"
+                    value={editing.fullName}
+                    onChange={e => setEditing({ ...editing, fullName: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Role</Label>
+                  <select
+                    className="w-full mt-1 h-10 rounded-xl border border-input bg-background px-3 text-sm"
+                    value={editing.role}
+                    onChange={e => setEditing({ ...editing, role: e.target.value as StaffRole })}
+                  >
+                    {CREATABLE_ROLES.map(r => (
+                      <option key={r} value={r}>
+                        {r.toUpperCase()}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label>Status</Label>
+                  <select
+                    className="w-full mt-1 h-10 rounded-xl border border-input bg-background px-3 text-sm"
+                    value={editing.status}
+                    onChange={e => setEditing({ ...editing, status: e.target.value as StaffAccountStatus })}
+                  >
+                    {(["INVITED", "ACTIVE", "SUSPENDED", "DISABLED"] as StaffAccountStatus[]).map(s => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label>Department</Label>
+                  <Input
+                    className="mt-1 rounded-xl"
+                    value={editing.department}
+                    onChange={e => setEditing({ ...editing, department: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Staff ID</Label>
+                  <Input
+                    className="mt-1 rounded-xl"
+                    value={editing.staffId}
+                    onChange={e => setEditing({ ...editing, staffId: e.target.value })}
+                  />
+                </div>
+                <DialogFooter className="sm:col-span-2 gap-2">
+                  <Button type="button" variant="outline" onClick={() => setEditing(null)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={busy}>
+                    Save
+                  </Button>
+                </DialogFooter>
+              </form>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+/** Compact dashboard teaser — not the full staff table. */
+export function StaffQuickAccessCard() {
+  const { getAccessToken } = useAuth();
+  const [stats, setStats] = useState({ active: 0, invited: 0 });
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const token = await getAccessToken();
+        if (!token) return;
+        const res = await authService.listStaff(token);
+        setStats({
+          active: res.staff.filter(s => s.status === "ACTIVE").length,
+          invited: res.staff.filter(s => s.status === "INVITED").length,
+        });
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [getAccessToken]);
+
+  return (
+    <Card className="rounded-2xl shadow-card">
+      <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
+        <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <Users className="h-4 w-4 text-primary" />
+          Staff
+        </CardTitle>
+        <Button asChild size="sm" variant="outline">
+          <Link to="/admin/staff">Manage Staff →</Link>
+        </Button>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground">
+          <span className="font-semibold text-foreground tabular-nums">{stats.active}</span> active staff
+          {stats.invited > 0 && (
+            <>
+              {" · "}
+              <span className="font-semibold text-foreground tabular-nums">{stats.invited}</span> pending invitation
+              {stats.invited === 1 ? "" : "s"}
+            </>
+          )}
+        </p>
       </CardContent>
     </Card>
   );

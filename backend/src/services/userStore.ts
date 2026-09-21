@@ -283,3 +283,14 @@ export async function linkFirebaseUid(email: string, firebaseUid: string): Promi
 export async function touchLastLogin(id: string): Promise<StaffUser | null> {
   return updateStaffUser(id, { lastLoginAt: new Date().toISOString() });
 }
+
+export async function deleteStaffUser(id: string): Promise<StaffUser | null> {
+  const existing = await findById(id);
+  if (!existing) return null;
+  if (mongoReady && StaffModel) {
+    await StaffModel.findByIdAndDelete(id);
+    return existing;
+  }
+  memory.delete(id);
+  return existing;
+}
