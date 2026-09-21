@@ -11,11 +11,16 @@ import {
   type User,
 } from "firebase/auth";
 
+function cleanVite(value: string | undefined): string {
+  if (!value) return "";
+  return String(value).trim().replace(/^["']|["']$/g, "");
+}
+
 const config = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string | undefined,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string | undefined,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID as string | undefined,
+  apiKey: cleanVite(import.meta.env.VITE_FIREBASE_API_KEY as string | undefined),
+  authDomain: cleanVite(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string | undefined),
+  projectId: cleanVite(import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined),
+  appId: cleanVite(import.meta.env.VITE_FIREBASE_APP_ID as string | undefined),
 };
 
 let app: FirebaseApp | null = null;

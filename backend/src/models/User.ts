@@ -9,7 +9,9 @@ export type StaffRole =
   | "billing"
   | "lab";
 
-export type StaffAccountStatus = "ACTIVE" | "DISABLED" | "INVITED";
+export type StaffAccountStatus = "INVITED" | "ACTIVE" | "SUSPENDED" | "DISABLED";
+
+export const STAFF_STATUSES: StaffAccountStatus[] = ["INVITED", "ACTIVE", "SUSPENDED", "DISABLED"];
 
 export interface StaffUser {
   id: string;
@@ -22,6 +24,7 @@ export interface StaffUser {
   status: StaffAccountStatus;
   createdAt: string;
   updatedAt: string;
+  lastLoginAt: string | null;
 }
 
 export const STAFF_ROLES: StaffRole[] = [
@@ -34,9 +37,25 @@ export const STAFF_ROLES: StaffRole[] = [
   "lab",
 ];
 
+/** Roles Admin may create via Staff Management (admin creation is explicitly allowed). */
+export const CREATABLE_STAFF_ROLES: StaffRole[] = [
+  "doctor",
+  "nurse",
+  "lab",
+  "pharmacy",
+  "billing",
+  "reception",
+  "admin",
+];
+
 export function normalizeStaffRole(raw: string): StaffRole | null {
   const r = raw.trim().toLowerCase();
   return (STAFF_ROLES as string[]).includes(r) ? (r as StaffRole) : null;
+}
+
+export function normalizeStaffStatus(raw: string): StaffAccountStatus | null {
+  const s = raw.trim().toUpperCase();
+  return (STAFF_STATUSES as string[]).includes(s) ? (s as StaffAccountStatus) : null;
 }
 
 export function toPublicStaffUser(u: StaffUser) {
@@ -51,6 +70,7 @@ export function toPublicStaffUser(u: StaffUser) {
     status: u.status,
     createdAt: u.createdAt,
     updatedAt: u.updatedAt,
+    lastLoginAt: u.lastLoginAt,
   };
 }
 

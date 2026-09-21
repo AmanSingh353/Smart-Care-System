@@ -237,18 +237,35 @@ export const useAuth = () => {
 };
 
 export function formatAuthError(err: unknown): string {
-  if (err instanceof ApiError) return err.message;
+  if (err instanceof ApiError) {
+    const body = err.body as { error?: string; message?: string } | null;
+    const code = body?.error || "";
+    if (code === "ACCOUNT_DISABLED") return "Account disabled. Contact your administrator.";
+    if (code === "ACCOUNT_SUSPENDED") return "Account suspended. Contact your administrator.";
+    if (code === "ACCOUNT_INVITED") return "Account invited but not activated yet.";
+    if (code === "NOT_REGISTERED") return err.message;
+    if (code === "FIREBASE_NOT_CONFIGURED") return "Backend authentication is unavailable. Firebase Admin is not configured.";
+    if (err.status === 0 || err.status >= 500) return err.message || "Backend unavailable. Try again later.";
+    return err.message;
+  }
   if (err && typeof err === "object" && "code" in err) {
     const code = String((err as { code: string }).code);
-    if (code === "auth/invalid-credential" || code === "auth/wrong-password") {
-      return "Incorrect email or password.";
+    if (code === "auth/invalid-credential" || code === "auth/wrong-password" || code === "auth/invalid-login-credentials") {
+      return "Invalid credentials. Check your email and password.";
     }
-    if (code === "auth/user-not-found") return "No account found for this email.";
+    if (code === "auth/user-not-found") return "Account not found for this email.";
+    if (code === "auth/user-disabled") return "Account disabled in Firebase Authentication.";
     if (code === "auth/too-many-requests") return "Too many attempts. Try again later.";
     if (code === "auth/popup-closed-by-user") return "Google sign-in was cancelled.";
     if (code === "auth/invalid-email") return "Enter a valid email address.";
+    if (code === "auth/network-request-failed") return "Firebase unavailable. Check your network connection.";
   }
-  if (err instanceof Error) return err.message;
+  if (err instanceof Error) {
+    if (/Firebase client is not configured/i.test(err.message)) {
+      return "Firebase unavailable. Frontend VITE_FIREBASE_* variables are missing.";
+    }
+    return err.message;
+  }
   return "Sign-in failed. Please try again.";
 }
 

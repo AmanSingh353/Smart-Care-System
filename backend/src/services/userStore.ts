@@ -6,7 +6,7 @@
 import mongoose, { Schema, type Model } from "mongoose";
 import { env } from "../config/env";
 import type { StaffAccountStatus, StaffRole, StaffUser } from "../models/User";
-import { STAFF_ROLES } from "../models/User";
+import { STAFF_ROLES, STAFF_STATUSES } from "../models/User";
 
 const memory = new Map<string, StaffUser>();
 let seq = 1;
@@ -20,6 +20,7 @@ interface StaffUserMongo {
   department: string;
   staffId: string;
   status: StaffAccountStatus;
+  lastLoginAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -32,14 +33,17 @@ const StaffUserSchema = new Schema<StaffUserMongo>(
     role: { type: String, required: true, enum: STAFF_ROLES },
     department: { type: String, default: "" },
     staffId: { type: String, required: true, unique: true },
-    status: { type: String, required: true, enum: ["ACTIVE", "DISABLED", "INVITED"] },
+    status: { type: String, required: true, enum: STAFF_STATUSES },
+    lastLoginAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
 
 let StaffModel: Model<StaffUserMongo> | null = null;
 
-function fromMongo(doc: StaffUserMongo & { _id: { toString(): string }; createdAt: Date; updatedAt: Date }): StaffUser {
+function fromMongo(
+  doc: StaffUserMongo & { _id: { toString(): string }; createdAt: Date; updatedAt: Date }
+): StaffUser {
   return {
     id: doc._id.toString(),
     firebaseUid: doc.firebaseUid,
@@ -51,6 +55,7 @@ function fromMongo(doc: StaffUserMongo & { _id: { toString(): string }; createdA
     status: doc.status,
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
+    lastLoginAt: doc.lastLoginAt ? doc.lastLoginAt.toISOString() : null,
   };
 }
 
@@ -79,7 +84,11 @@ export async function initUserStore(): Promise<void> {
 }
 
 /** Fictional demo roster — emails only; passwords live in Firebase, never here. */
-const DEMO_ROSTER: Array<Omit<StaffUser, "id" | "firebaseUid" | "createdAt" | "updatedAt" | "status"> & { status?: StaffAccountStatus }> = [
+const DEMO_ROSTER: Array<
+  Omit<StaffUser, "id" | "firebaseUid" | "createdAt" | "updatedAt" | "status" | "lastLoginAt"> & {
+    status?: StaffAccountStatus;
+  }
+> = [
   { email: "admin@smartcare.demo", fullName: "Demo Administrator", role: "admin", department: "Administration", staffId: "ADM-001" },
   { email: "doctor@smartcare.demo", fullName: "Dr. Demo Physician", role: "doctor", department: "General Medicine", staffId: "DOC-001" },
   { email: "nurse@smartcare.demo", fullName: "Demo Nurse", role: "nurse", department: "Nursing", staffId: "NUR-001" },
@@ -105,6 +114,7 @@ function seedDemoStaffIfEmpty() {
       status: "ACTIVE",
       createdAt: now,
       updatedAt: now,
+      lastLoginAt: null,
     });
   }
   console.log(`[users] Seeded ${DEMO_ROSTER.length} demo staff records (no passwords stored)`);
@@ -122,6 +132,7 @@ async function seedDemoStaffMongo() {
       department: row.department,
       staffId: row.staffId,
       status: "ACTIVE",
+      lastLoginAt: null,
       createdAt: now,
       updatedAt: now,
     });
@@ -146,6 +157,15 @@ export async function findByEmail(email: string): Promise<StaffUser | null> {
   return [...memory.values()].find(u => u.email === key) || null;
 }
 
+export async function findByStaffId(staffId: string): Promise<StaffUser | null> {
+  const key = staffId.trim();
+  if (mongoReady && StaffModel) {
+    const doc = await StaffModel.findOne({ staffId: key }).lean();
+    return doc ? fromMongo(doc as never) : null;
+  }
+  return [...memory.values()].find(u => u.staffId === key) || null;
+}
+
 export async function findByFirebaseUid(uid: string): Promise<StaffUser | null> {
   if (mongoReady && StaffModel) {
     const doc = await StaffModel.findOne({ firebaseUid: uid }).lean();
@@ -164,9 +184,13 @@ export async function findById(id: string): Promise<StaffUser | null> {
 
 export async function countAdmins(): Promise<number> {
   if (mongoReady && StaffModel) {
-    return StaffModel.countDocuments({ role: "admin", status: { $ne: "DISABLED" } });
+    return StaffModel.countDocuments({
+      role: "admin",
+      status: { $in: ["ACTIVE", "INVITED"] },
+    });
   }
-  return [...memory.values()].filter(u => u.role === "admin" && u.status !== "DISABLED").length;
+  return [...memory.values()].filter(u => u.role === "admin" && (u.status === "ACTIVE" || u.status === "INVITED"))
+    .length;
 }
 
 export async function createStaffUser(input: {
@@ -179,9 +203,14 @@ export async function createStaffUser(input: {
   firebaseUid?: string | null;
 }): Promise<StaffUser> {
   const email = input.email.trim().toLowerCase();
-  const existing = await findByEmail(email);
-  if (existing) {
-    throw Object.assign(new Error("A staff user with this email already exists"), { status: 409 });
+  const staffId = input.staffId.trim();
+  const existingEmail = await findByEmail(email);
+  if (existingEmail) {
+    throw Object.assign(new Error("A staff user with this email already exists"), { status: 409, code: "DUPLICATE_EMAIL" });
+  }
+  const existingId = await findByStaffId(staffId);
+  if (existingId) {
+    throw Object.assign(new Error("A staff user with this Staff ID already exists"), { status: 409, code: "DUPLICATE_STAFF_ID" });
   }
   if (mongoReady && StaffModel) {
     const doc = await StaffModel.create({
@@ -190,8 +219,9 @@ export async function createStaffUser(input: {
       fullName: input.fullName.trim(),
       role: input.role,
       department: input.department.trim(),
-      staffId: input.staffId.trim(),
+      staffId,
       status: input.status || "ACTIVE",
+      lastLoginAt: null,
     });
     return fromMongo(doc as never);
   }
@@ -204,10 +234,11 @@ export async function createStaffUser(input: {
     fullName: input.fullName.trim(),
     role: input.role,
     department: input.department.trim(),
-    staffId: input.staffId.trim(),
+    staffId,
     status: input.status || "ACTIVE",
     createdAt: now,
     updatedAt: now,
+    lastLoginAt: null,
   };
   memory.set(id, user);
   return user;
@@ -215,10 +246,25 @@ export async function createStaffUser(input: {
 
 export async function updateStaffUser(
   id: string,
-  patch: Partial<Pick<StaffUser, "fullName" | "role" | "department" | "staffId" | "status" | "firebaseUid">>
+  patch: Partial<
+    Pick<StaffUser, "fullName" | "role" | "department" | "staffId" | "status" | "firebaseUid" | "lastLoginAt">
+  >
 ): Promise<StaffUser | null> {
+  if (patch.staffId) {
+    const other = await findByStaffId(patch.staffId);
+    if (other && other.id !== id) {
+      throw Object.assign(new Error("A staff user with this Staff ID already exists"), {
+        status: 409,
+        code: "DUPLICATE_STAFF_ID",
+      });
+    }
+  }
   if (mongoReady && StaffModel) {
-    const doc = await StaffModel.findByIdAndUpdate(id, { $set: patch }, { new: true }).lean();
+    const mongoPatch: Record<string, unknown> = { ...patch };
+    if (patch.lastLoginAt !== undefined) {
+      mongoPatch.lastLoginAt = patch.lastLoginAt ? new Date(patch.lastLoginAt) : null;
+    }
+    const doc = await StaffModel.findByIdAndUpdate(id, { $set: mongoPatch }, { new: true }).lean();
     return doc ? fromMongo(doc as never) : null;
   }
   const cur = memory.get(id);
@@ -232,4 +278,8 @@ export async function linkFirebaseUid(email: string, firebaseUid: string): Promi
   const user = await findByEmail(email);
   if (!user) return null;
   return updateStaffUser(user.id, { firebaseUid });
+}
+
+export async function touchLastLogin(id: string): Promise<StaffUser | null> {
+  return updateStaffUser(id, { lastLoginAt: new Date().toISOString() });
 }

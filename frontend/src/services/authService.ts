@@ -2,6 +2,8 @@ import { api } from "./api";
 
 export type StaffRole = "admin" | "reception" | "doctor" | "nurse" | "pharmacy" | "billing" | "lab";
 
+export type StaffAccountStatus = "INVITED" | "ACTIVE" | "SUSPENDED" | "DISABLED";
+
 export interface StaffProfile {
   id: string;
   firebaseUid: string | null;
@@ -10,9 +12,10 @@ export interface StaffProfile {
   role: StaffRole;
   department: string;
   staffId: string;
-  status: "ACTIVE" | "DISABLED" | "INVITED";
+  status: StaffAccountStatus;
   createdAt: string;
   updatedAt: string;
+  lastLoginAt: string | null;
 }
 
 export const authService = {
@@ -22,9 +25,9 @@ export const authService = {
       firebaseAdminConfigured: boolean;
       providers: string[];
       staffRoles: string[];
+      accountStatuses?: string[];
     }>("/api/auth"),
 
-  /** Verify Firebase ID token with backend; returns authoritative role from DB */
   session: (idToken: string) =>
     api.post<{ user: StaffProfile; role: StaffRole; firebase: { uid: string; email?: string } }>(
       "/api/auth/session",
@@ -32,8 +35,14 @@ export const authService = {
       { Authorization: `Bearer ${idToken}` }
     ),
 
+  me: (idToken: string) =>
+    api.get<{ user: StaffProfile }>("/api/auth/me", { Authorization: `Bearer ${idToken}` }),
+
   listStaff: (idToken: string) =>
     api.get<{ staff: StaffProfile[] }>("/api/auth/staff", { Authorization: `Bearer ${idToken}` }),
+
+  getStaff: (idToken: string, id: string) =>
+    api.get<{ user: StaffProfile }>(`/api/auth/staff/${id}`, { Authorization: `Bearer ${idToken}` }),
 
   createStaff: (
     idToken: string,
@@ -43,20 +52,27 @@ export const authService = {
       role: StaffRole;
       department: string;
       staffId: string;
-      status?: string;
+      status?: StaffAccountStatus;
       temporaryPassword?: string;
     }
   ) =>
-    api.post<{ user: StaffProfile; temporaryPassword?: string; message: string }>(
-      "/api/auth/staff",
-      body,
-      { Authorization: `Bearer ${idToken}` }
-    ),
+    api.post<{
+      user: StaffProfile;
+      temporaryPassword?: string;
+      passwordResetLink?: string;
+      message: string;
+    }>("/api/auth/staff", body, { Authorization: `Bearer ${idToken}` }),
 
   updateStaff: (
     idToken: string,
     id: string,
-    body: Partial<{ fullName: string; role: StaffRole; department: string; staffId: string; status: string }>
+    body: Partial<{
+      fullName: string;
+      role: StaffRole;
+      department: string;
+      staffId: string;
+      status: StaffAccountStatus;
+    }>
   ) =>
     api.patch<{ user: StaffProfile }>(`/api/auth/staff/${id}`, body, {
       Authorization: `Bearer ${idToken}`,

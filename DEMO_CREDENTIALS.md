@@ -6,73 +6,39 @@
 Staff authentication uses **Firebase Authentication** (email/password primary, Google optional).  
 Smart Care System **never stores staff passwords** in MongoDB or source code.
 
----
-
-## Staff access (Firebase)
-
-1. Configure Firebase (see `STAFF_AUTHENTICATION.md` and `.env.example` files).  
-2. Create Firebase Auth users for the demo emails below (Console or Admin Staff Management).  
-3. Open `/login` → **Hospital Staff**.  
-4. Sign in with email + password (or Continue with Google if that Google account is registered).
-
-| Email | Role | Staff ID | Path |
-|-------|------|----------|------|
-| `admin@smartcare.demo` | Admin | ADM-001 | `/admin` |
-| `doctor@smartcare.demo` | Doctor | DOC-001 | `/doctor` |
-| `nurse@smartcare.demo` | Nurse | NUR-001 | `/nurse` |
-| `lab@smartcare.demo` | Lab | LAB-001 | `/lab` |
-| `pharmacy@smartcare.demo` | Pharmacy | PHR-001 | `/pharmacy` |
-| `billing@smartcare.demo` | Billing | BIL-001 | `/billing` |
-| `reception@smartcare.demo` | Reception | REC-001 | `/reception` |
-
-### Demo passwords
-
-Set passwords only in:
-
-- Firebase Console → Authentication → Users, or  
-- A private local note / password manager, or  
-- Backend-only `BOOTSTRAP_ADMIN_PASSWORD` for the first admin (never commit)
-
-**Passwords are intentionally omitted from this repository.**
+**Demo passwords are configured separately** (Firebase Console, Admin Staff Management temporary password / reset link, or a private password manager). They are intentionally omitted from this repository.
 
 ---
 
-## Family access (separate from staff)
+## Staff demo accounts
 
-1. Login → **Family**  
-2. Enter Patient ID from Reception  
+| Role | Email | Staff ID | Workspace |
+|------|-------|----------|-----------|
+| Admin | `admin@smartcare.demo` | ADM-001 | `/admin` |
+| Doctor | `doctor@smartcare.demo` | DOC-001 | `/doctor` |
+| Nurse | `nurse@smartcare.demo` | NUR-001 | `/nurse` |
+| Lab | `lab@smartcare.demo` | LAB-001 | `/lab` |
+| Pharmacy | `pharmacy@smartcare.demo` | PHR-001 | `/pharmacy` |
+| Billing | `billing@smartcare.demo` | BIL-001 | `/billing` |
+| Reception | `reception@smartcare.demo` | REC-001 | `/reception` |
 
-**Canonical live demo:** register **Arjun Verma** at Reception, then use the generated `SCS-####` ID.
+These emails are seeded as Smart Care System `StaffUser` records on backend startup. Roles are defined by Smart Care System, not by Firebase.
 
-**Supporting seed IDs (after Reset Demo Data):**
+### How to set demo passwords
 
-| ID | Purpose |
-|----|---------|
-| SCS-1001 | Quiet patient (no CareGuard signals) |
-| SCS-1002 | Lab review + delayed lab |
-| SCS-1003 | Pharmacy pending |
-| SCS-1004 | Overdue nursing task |
-| SCS-1005 | Allergy / prescription review |
-| SCS-1006 | Critical lab result |
-| SCS-1007 | Discharge billing blocked |
-
-Family users never receive staff roles.
-
----
-
-## Reset demo clinical data
-
-Admin → **Reset Demo Data** (confirmation required).
-
-Restores fictional seed patients and CareGuard signals. Does **not** delete Firebase Auth users or staff records.
+1. Firebase Console → Authentication → Users → create each email, **or**  
+2. Admin → Staff Management (creates Firebase + SCS user), **or**  
+3. Match existing seeded SCS email in Console, then first login links `firebaseUid`.
 
 ---
 
-## Bootstrap first admin
+## Family access (separate)
 
-```env
-BOOTSTRAP_ADMIN_EMAIL=admin@smartcare.demo
-# BOOTSTRAP_ADMIN_PASSWORD=  # backend .env only, optional
-```
+Login → Family → Patient ID (e.g. `SCS-1001`).  
+Family never receives staff roles.
 
-Runs only when no admin exists. See `STAFF_AUTHENTICATION.md`.
+---
+
+## Reset clinical demo data
+
+Admin → Reset Demo Data. Does not delete Firebase Auth users or staff role records.
