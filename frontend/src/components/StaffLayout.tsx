@@ -54,7 +54,7 @@ const GROUP_LABELS: Record<StaffRole, { title: string; paths?: string[] }[]> = {
 export const StaffLayout = ({ children, allowedRoles }: { children: ReactNode; allowedRoles?: StaffRole[] }) => {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { role, logout } = useAuth();
+  const { role, staff, logout } = useAuth();
   const { patients } = usePatients();
   const { getRoleSignals } = useCareGuard();
 
@@ -144,6 +144,9 @@ export const StaffLayout = ({ children, allowedRoles }: { children: ReactNode; a
         <div className="mx-3 mt-4 rounded-2xl bg-primary/5 border border-primary/10 px-3 py-2.5">
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Active role</p>
           <p className="text-sm font-semibold text-foreground">{ROLE_LABELS[role]}</p>
+          {staff?.fullName && (
+            <p className="text-[11px] text-muted-foreground truncate mt-0.5">{staff.fullName}</p>
+          )}
         </div>
 
         {renderNav(() => setSidebarOpen(false))}
@@ -151,7 +154,9 @@ export const StaffLayout = ({ children, allowedRoles }: { children: ReactNode; a
         <div className="p-3 border-t border-sidebar-border">
           <Link
             to="/login"
-            onClick={logout}
+            onClick={() => {
+              void logout();
+            }}
             className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
           >
             <LogOut className="h-4 w-4" />
@@ -194,8 +199,8 @@ export const StaffLayout = ({ children, allowedRoles }: { children: ReactNode; a
               {ROLE_LABELS[role].slice(0, 1)}
             </div>
             <div className="leading-tight">
-              <p className="text-xs font-semibold text-foreground">{ROLE_LABELS[role]}</p>
-              <p className="text-[10px] text-muted-foreground">Hospital staff</p>
+              <p className="text-xs font-semibold text-foreground">{staff?.fullName || ROLE_LABELS[role]}</p>
+              <p className="text-[10px] text-muted-foreground">{ROLE_LABELS[role]}</p>
             </div>
             <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
           </div>

@@ -24,6 +24,8 @@ export const authController = {
   },
 };
 
+// Staff Firebase auth controllers live in staffAuthController.ts
+
 export const patientController = {
   list(_req: Request, res: Response) {
     res.json(patientService.list());

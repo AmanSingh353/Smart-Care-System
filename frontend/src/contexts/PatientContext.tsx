@@ -30,6 +30,7 @@ import {
 import { ensureDemoSeedVersion, resetAllDemoLocalState } from "@/config/demoReset";
 import { careguardService } from "@/services/careguardService";
 import { api } from "@/services/api";
+import { getIdToken } from "@/lib/firebase";
 
 function loadPatients(): Patient[] {
   ensureDemoSeedVersion();
@@ -462,26 +463,31 @@ export const PatientProvider = ({ children }: { children: ReactNode }) => {
     const next = resetAllDemoLocalState();
     setAllPatients(next);
     // Clear backend CareGuard memory if API is up (demo only — never touches a production DB)
-    void fetch(`${api.baseUrl.replace(/\/$/, "")}/api/careguard/reset-demo`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-scs-role": "admin",
-        Authorization: `Bearer ${btoa(JSON.stringify({ role: "admin" }))}`,
-      },
-      body: JSON.stringify({
-        patients: next.map(p => ({
-          id: p.id,
-          name: p.name,
-          allergies: p.allergies,
-          treatmentStatus: p.treatmentStatus,
-          billStatus: p.billStatus,
-          medicines: p.medicines,
-          tests: p.tests,
-          billItems: p.billItems.map(b => ({ id: b.id })),
-        })),
-      }),
-    }).catch(() => undefined);
+    void (async () => {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      try {
+        const token = await getIdToken(false);
+        if (token) headers.Authorization = `Bearer ${token}`;
+      } catch {
+        /* ignore */
+      }
+      await fetch(`${api.baseUrl.replace(/\/$/, "")}/api/careguard/reset-demo`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          patients: next.map(p => ({
+            id: p.id,
+            name: p.name,
+            allergies: p.allergies,
+            treatmentStatus: p.treatmentStatus,
+            billStatus: p.billStatus,
+            medicines: p.medicines,
+            tests: p.tests,
+            billItems: p.billItems.map(b => ({ id: b.id })),
+          })),
+        }),
+      });
+    })().catch(() => undefined);
     toast.success("Demo data restored — fictional patients & workflows reset");
   };
 

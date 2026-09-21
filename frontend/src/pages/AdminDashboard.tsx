@@ -23,6 +23,7 @@ import { useMemo, useState } from "react";
 import { StaffLayout } from "@/components/StaffLayout";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { StatCard } from "@/components/dashboard/StatCard";
+import { StaffManagement } from "@/components/admin/StaffManagement";
 
 const AdminDashboard = () => {
   const { patients, getPatientById, updateFamilyRequestStatus, resetDemoData } = usePatients();
@@ -107,6 +108,8 @@ const AdminDashboard = () => {
         title="Hospital Command"
         description="Live overview derived from the shared patient record across every department."
       />
+
+      <StaffManagement />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
         <StatCard label="Total patients" value={patients.length} icon={Users} />

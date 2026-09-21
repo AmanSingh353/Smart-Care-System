@@ -1,52 +1,230 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  ReactNode,
+  useEffect,
+  useCallback,
+} from "react";
+import { setAuthTokenProvider, ApiError } from "@/services/api";
+import { authService, type StaffProfile, type StaffRole } from "@/services/authService";
+import {
+  firebaseSignInEmailPassword,
+  firebaseSignInGoogle,
+  firebaseSendPasswordReset,
+  firebaseSignOut,
+  getIdToken,
+  isFirebaseClientConfigured,
+  watchAuth,
+} from "@/lib/firebase";
 
-export type StaffRole = "admin" | "reception" | "doctor" | "nurse" | "pharmacy" | "billing" | "lab";
+export type { StaffRole };
 
 interface AuthContextType {
   role: StaffRole | "family" | null;
   patientId: string | null;
-  loginStaff: (role: StaffRole) => void;
+  staff: StaffProfile | null;
+  loading: boolean;
+  firebaseReady: boolean;
+  loginStaffEmailPassword: (email: string, password: string) => Promise<StaffProfile>;
+  loginStaffGoogle: () => Promise<StaffProfile>;
+  sendPasswordReset: (email: string) => Promise<void>;
   loginFamily: (patientId: string) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
+  getAccessToken: () => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const STORAGE_KEY = "scs30-auth";
 
+type StoredAuth =
+  | { kind: "staff"; role: StaffRole; staff: StaffProfile }
+  | { kind: "family"; role: "family"; patientId: string };
+
+function readStored(): StoredAuth | null {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as StoredAuth;
+  } catch {
+    return null;
+  }
+}
+
+function writeStored(value: StoredAuth | null) {
+  if (!value) sessionStorage.removeItem(STORAGE_KEY);
+  else sessionStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+}
+
+const ROLE_ROUTES: Record<StaffRole, string> = {
+  admin: "/admin",
+  doctor: "/doctor",
+  nurse: "/nurse",
+  pharmacy: "/pharmacy",
+  billing: "/billing",
+  reception: "/reception",
+  lab: "/lab",
+};
+
+export function workspacePathForRole(role: StaffRole): string {
+  return ROLE_ROUTES[role];
+}
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [role, setRole] = useState<StaffRole | "family" | null>(null);
   const [patientId, setPatientId] = useState<string | null>(null);
+  const [staff, setStaff] = useState<StaffProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const firebaseReady = isFirebaseClientConfigured();
 
-  useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as { role: StaffRole | "family"; patientId?: string };
-        setRole(parsed.role);
-        setPatientId(parsed.patientId ?? null);
-      }
-    } catch {
-      /* ignore */
+  const getAccessToken = useCallback(async () => {
+    const stored = readStored();
+    if (stored?.kind === "family") {
+      return btoa(JSON.stringify({ role: "family", patientId: stored.patientId }));
     }
+    return getIdToken(false);
   }, []);
 
-  const persist = (nextRole: StaffRole | "family" | null, nextPatientId: string | null) => {
-    setRole(nextRole);
-    setPatientId(nextPatientId);
-    if (nextRole) {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ role: nextRole, patientId: nextPatientId }));
-    } else {
-      sessionStorage.removeItem(STORAGE_KEY);
+  useEffect(() => {
+    setAuthTokenProvider(() => getAccessToken());
+    return () => setAuthTokenProvider(null);
+  }, [getAccessToken]);
+
+  const applyStaff = useCallback((profile: StaffProfile) => {
+    setRole(profile.role);
+    setPatientId(null);
+    setStaff(profile);
+    writeStored({ kind: "staff", role: profile.role, staff: profile });
+  }, []);
+
+  const establishStaffSession = useCallback(
+    async (forceRefresh = true) => {
+      const token = await getIdToken(forceRefresh);
+      if (!token) throw new Error("No Firebase session");
+      const result = await authService.session(token);
+      applyStaff(result.user);
+      return result.user;
+    },
+    [applyStaff]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrate() {
+      const stored = readStored();
+      if (stored?.kind === "family") {
+        if (!cancelled) {
+          setRole("family");
+          setPatientId(stored.patientId);
+          setStaff(null);
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (!firebaseReady) {
+        if (stored?.kind === "staff" && !cancelled) {
+          // Stale staff session without Firebase — clear
+          writeStored(null);
+        }
+        if (!cancelled) setLoading(false);
+        return;
+      }
+
+      const unsub = watchAuth(async user => {
+        if (cancelled) return;
+        if (!user) {
+          const s = readStored();
+          if (s?.kind === "staff") {
+            writeStored(null);
+            setRole(null);
+            setStaff(null);
+          }
+          setLoading(false);
+          return;
+        }
+        try {
+          await establishStaffSession(false);
+        } catch {
+          writeStored(null);
+          setRole(null);
+          setStaff(null);
+          await firebaseSignOut().catch(() => undefined);
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      });
+
+      return () => unsub();
+    }
+
+    let cleanup: (() => void) | undefined;
+    hydrate().then(fn => {
+      cleanup = fn;
+    });
+
+    return () => {
+      cancelled = true;
+      cleanup?.();
+    };
+  }, [establishStaffSession, firebaseReady]);
+
+  const loginStaffEmailPassword = async (email: string, password: string) => {
+    await firebaseSignInEmailPassword(email, password);
+    return establishStaffSession(true);
+  };
+
+  const loginStaffGoogle = async () => {
+    await firebaseSignInGoogle();
+    try {
+      return await establishStaffSession(true);
+    } catch (err) {
+      await firebaseSignOut().catch(() => undefined);
+      writeStored(null);
+      setRole(null);
+      setStaff(null);
+      throw err;
     }
   };
 
-  const loginStaff = (r: StaffRole) => persist(r, null);
-  const loginFamily = (id: string) => persist("family", id.toUpperCase());
-  const logout = () => persist(null, null);
+  const sendPasswordReset = async (email: string) => {
+    await firebaseSendPasswordReset(email);
+  };
+
+  const loginFamily = (id: string) => {
+    const patient = id.trim().toUpperCase();
+    setRole("family");
+    setPatientId(patient);
+    setStaff(null);
+    writeStored({ kind: "family", role: "family", patientId: patient });
+  };
+
+  const logout = async () => {
+    writeStored(null);
+    setRole(null);
+    setPatientId(null);
+    setStaff(null);
+    await firebaseSignOut().catch(() => undefined);
+  };
 
   return (
-    <AuthContext.Provider value={{ role, patientId, loginStaff, loginFamily, logout }}>
+    <AuthContext.Provider
+      value={{
+        role,
+        patientId,
+        staff,
+        loading,
+        firebaseReady,
+        loginStaffEmailPassword,
+        loginStaffGoogle,
+        sendPasswordReset,
+        loginFamily,
+        logout,
+        getAccessToken,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -57,6 +235,22 @@ export const useAuth = () => {
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 };
+
+export function formatAuthError(err: unknown): string {
+  if (err instanceof ApiError) return err.message;
+  if (err && typeof err === "object" && "code" in err) {
+    const code = String((err as { code: string }).code);
+    if (code === "auth/invalid-credential" || code === "auth/wrong-password") {
+      return "Incorrect email or password.";
+    }
+    if (code === "auth/user-not-found") return "No account found for this email.";
+    if (code === "auth/too-many-requests") return "Too many attempts. Try again later.";
+    if (code === "auth/popup-closed-by-user") return "Google sign-in was cancelled.";
+    if (code === "auth/invalid-email") return "Enter a valid email address.";
+  }
+  if (err instanceof Error) return err.message;
+  return "Sign-in failed. Please try again.";
+}
 
 export const ROLE_NAV: Record<StaffRole, { label: string; path: string }[]> = {
   admin: [

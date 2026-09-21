@@ -1,19 +1,28 @@
 import { api, ApiError } from "./api";
 import type { Patient } from "@/data/mockData";
 import type { CareGuardSignal } from "@/careguard/types";
+import { getIdToken } from "@/lib/firebase";
 
-function authHeaders(): HeadersInit {
+async function authHeaders(): Promise<HeadersInit> {
   try {
     const raw = sessionStorage.getItem("scs30-auth");
     if (!raw) return {};
-    const parsed = JSON.parse(raw) as { role?: string; patientId?: string };
+    const parsed = JSON.parse(raw) as { kind?: string; role?: string; patientId?: string; staff?: { fullName?: string } };
     const h: Record<string, string> = {};
-    if (parsed.role) {
-      h["x-scs-role"] = parsed.role;
-      h["x-scs-actor"] = parsed.role;
-      h.Authorization = `Bearer ${btoa(JSON.stringify({ role: parsed.role, patientId: parsed.patientId }))}`;
+
+    if (parsed.kind === "family" || parsed.role === "family") {
+      if (parsed.role) h["x-scs-role"] = "family";
+      if (parsed.patientId) h["x-scs-patient-id"] = parsed.patientId;
+      h.Authorization = `Bearer ${btoa(JSON.stringify({ role: "family", patientId: parsed.patientId }))}`;
+      return h;
     }
-    if (parsed.patientId) h["x-scs-patient-id"] = parsed.patientId;
+
+    const token = await getIdToken(false);
+    if (token) {
+      h.Authorization = `Bearer ${token}`;
+      if (parsed.role) h["x-scs-role"] = parsed.role;
+      if (parsed.staff?.fullName) h["x-scs-actor"] = parsed.staff.fullName;
+    }
     return h;
   } catch {
     return {};
@@ -61,7 +70,7 @@ async function withAuth<T>(path: string, options: RequestInit = {}): Promise<T |
       ...options,
       headers: {
         "Content-Type": "application/json",
-        ...authHeaders(),
+        ...(await authHeaders()),
         ...(options.headers || {}),
       },
     });

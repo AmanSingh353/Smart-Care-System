@@ -2,7 +2,10 @@ import { placeholderService } from "./healthService";
 
 /** Domain services — stubs until Phase 3 persistence. */
 export const authService = {
-  status: () => placeholderService.describe("Auth"),
+  status: () => ({
+    ...placeholderService.describe("Auth"),
+    mode: "firebase",
+  }),
 };
 
 export const patientService = {

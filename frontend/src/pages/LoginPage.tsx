@@ -6,28 +6,91 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Stethoscope, Users, UserPlus, ArrowLeft } from "lucide-react";
-import { useAuth, StaffRole } from "@/contexts/AuthContext";
-
-const ROLE_ROUTES: Record<StaffRole, string> = {
-  admin: "/admin",
-  doctor: "/doctor",
-  nurse: "/nurse",
-  pharmacy: "/pharmacy",
-  billing: "/billing",
-  reception: "/reception",
-  lab: "/lab",
-};
+import {
+  useAuth,
+  formatAuthError,
+  workspacePathForRole,
+} from "@/contexts/AuthContext";
 
 const LoginPage = () => {
   const navigate = useNavigate();
-  const { loginStaff, loginFamily } = useAuth();
-  const [mode, setMode] = useState<"choose" | "staff" | "family">("choose");
-  const [staffRole, setStaffRole] = useState<StaffRole>("admin");
+  const {
+    loginStaffEmailPassword,
+    loginStaffGoogle,
+    sendPasswordReset,
+    loginFamily,
+    firebaseReady,
+  } = useAuth();
+  const [mode, setMode] = useState<"choose" | "staff" | "family" | "reset">("choose");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [patientId, setPatientId] = useState("SCS-1001");
+  const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const handleStaffLogin = () => {
-    loginStaff(staffRole);
-    navigate(ROLE_ROUTES[staffRole]);
+  const handleStaffLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setInfo(null);
+    if (!email.trim() || !password) {
+      setError("Email and password are required.");
+      return;
+    }
+    if (!firebaseReady) {
+      setError("Firebase is not configured. Set VITE_FIREBASE_* in the frontend environment.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const profile = await loginStaffEmailPassword(email, password);
+      navigate(workspacePathForRole(profile.role));
+    } catch (err) {
+      setError(formatAuthError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleGoogle = async () => {
+    setError(null);
+    setInfo(null);
+    if (!firebaseReady) {
+      setError("Firebase is not configured. Set VITE_FIREBASE_* in the frontend environment.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const profile = await loginStaffGoogle();
+      navigate(workspacePathForRole(profile.role));
+    } catch (err) {
+      setError(formatAuthError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setInfo(null);
+    if (!email.trim()) {
+      setError("Enter the email for your staff account.");
+      return;
+    }
+    if (!firebaseReady) {
+      setError("Firebase is not configured.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await sendPasswordReset(email);
+      setInfo("Password reset email sent. Check your inbox (and spam folder).");
+    } catch (err) {
+      setError(formatAuthError(err));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleFamilyLogin = () => {
@@ -73,32 +136,116 @@ const LoginPage = () => {
               <CardTitle className="text-lg">Staff Login</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <Label>Select Role</Label>
-                <select
-                  value={staffRole}
-                  onChange={e => setStaffRole(e.target.value as StaffRole)}
-                  className="w-full mt-1.5 h-11 rounded-xl border border-input bg-background px-3 text-sm"
-                >
-                  <option value="admin">Admin</option>
-                  <option value="reception">Reception / Registration</option>
-                  <option value="doctor">Doctor</option>
-                  <option value="nurse">Nurse</option>
-                  <option value="pharmacy">Pharmacy</option>
-                  <option value="lab">Laboratory</option>
-                  <option value="billing">Billing / Finance</option>
-                </select>
-              </div>
-              <p className="text-xs text-muted-foreground">Demo mode — no password required. Role controls which screens you can access.</p>
-              <Button onClick={handleStaffLogin} className="w-full">
-                Enter as {staffRole.charAt(0).toUpperCase() + staffRole.slice(1)}
-              </Button>
+              <form onSubmit={handleStaffLogin} className="space-y-4">
+                <div>
+                  <Label htmlFor="staff-email">Email</Label>
+                  <Input
+                    id="staff-email"
+                    type="email"
+                    autoComplete="username"
+                    placeholder="doctor@smartcare.demo"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    className="mt-1.5 h-11 rounded-xl"
+                    disabled={busy}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="staff-password">Password</Label>
+                  <Input
+                    id="staff-password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    className="mt-1.5 h-11 rounded-xl"
+                    disabled={busy}
+                  />
+                </div>
+                {error && <p className="text-sm text-destructive">{error}</p>}
+                {info && <p className="text-sm text-success">{info}</p>}
+                <Button type="submit" className="w-full" disabled={busy}>
+                  {busy ? "Signing in…" : "Sign In"}
+                </Button>
+              </form>
+
               <button
                 type="button"
-                onClick={() => setMode("choose")}
+                className="w-full text-center text-sm text-primary hover:underline"
+                onClick={() => {
+                  setError(null);
+                  setInfo(null);
+                  setMode("reset");
+                }}
+              >
+                Forgot password?
+              </button>
+
+              <div className="relative py-1">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">or</span>
+                </div>
+              </div>
+
+              <Button type="button" variant="outline" className="w-full" onClick={handleGoogle} disabled={busy}>
+                Continue with Google
+              </Button>
+
+              <p className="text-xs text-muted-foreground">
+                Roles are assigned by your hospital administrator. Google sign-in only works for registered staff accounts.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setMode("choose");
+                }}
                 className="w-full text-center text-sm text-muted-foreground hover:text-foreground"
               >
                 ← Back
+              </button>
+            </CardContent>
+          </Card>
+        )}
+
+        {mode === "reset" && (
+          <Card className="rounded-2xl shadow-card border-border">
+            <CardHeader>
+              <CardTitle className="text-lg">Reset password</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <form onSubmit={handleReset} className="space-y-4">
+                <div>
+                  <Label htmlFor="reset-email">Staff email</Label>
+                  <Input
+                    id="reset-email"
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    className="mt-1.5 h-11 rounded-xl"
+                    disabled={busy}
+                  />
+                </div>
+                {error && <p className="text-sm text-destructive">{error}</p>}
+                {info && <p className="text-sm text-foreground">{info}</p>}
+                <Button type="submit" className="w-full" disabled={busy}>
+                  Send reset email
+                </Button>
+              </form>
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setInfo(null);
+                  setMode("staff");
+                }}
+                className="w-full text-center text-sm text-muted-foreground hover:text-foreground"
+              >
+                ← Back to sign in
               </button>
             </CardContent>
           </Card>
@@ -120,7 +267,7 @@ const LoginPage = () => {
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Use the Patient ID from Reception registration (canonical demo: Arjun Verma). Supporting demos: SCS-1001–1007.
+                Family access is separate from staff accounts. Use the Patient ID from Reception registration.
               </p>
               <Button onClick={handleFamilyLogin} className="w-full">
                 Access Patient Info
