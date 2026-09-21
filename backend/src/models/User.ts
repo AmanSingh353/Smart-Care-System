@@ -37,7 +37,7 @@ export const STAFF_ROLES: StaffRole[] = [
   "lab",
 ];
 
-/** Roles Admin may create via Staff Management (admin creation is explicitly allowed). */
+/** Roles Admin may create via Staff Management (Admin is bootstrap-only). */
 export const CREATABLE_STAFF_ROLES: StaffRole[] = [
   "doctor",
   "nurse",
@@ -45,7 +45,6 @@ export const CREATABLE_STAFF_ROLES: StaffRole[] = [
   "pharmacy",
   "billing",
   "reception",
-  "admin",
 ];
 
 export function normalizeStaffRole(raw: string): StaffRole | null {

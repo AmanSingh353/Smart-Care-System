@@ -29,9 +29,14 @@ import {
 import { MoreHorizontal, Plus, Search, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 
-const CREATABLE_ROLES: StaffRole[] = ["doctor", "nurse", "lab", "pharmacy", "billing", "reception", "admin"];
+const CREATABLE_ROLES: StaffRole[] = ["doctor", "nurse", "lab", "pharmacy", "billing", "reception"];
 const FILTER_ROLES: Array<StaffRole | "all"> = ["all", ...CREATABLE_ROLES];
-const FILTER_STATUSES: Array<StaffAccountStatus | "all"> = ["all", "ACTIVE", "INVITED", "SUSPENDED", "DISABLED"];
+const FILTER_STATUSES: Array<"all" | "ACTIVE" | "INVITED" | "SUSPENDED"> = [
+  "all",
+  "ACTIVE",
+  "INVITED",
+  "SUSPENDED",
+];
 
 const emptyForm = {
   fullName: "",
@@ -93,9 +98,7 @@ export function StaffManagement() {
     return {
       total: staff.length,
       active: staff.filter(s => s.status === "ACTIVE").length,
-      suspended: staff.filter(s => s.status === "SUSPENDED").length,
-      disabled: staff.filter(s => s.status === "DISABLED").length,
-      invited: staff.filter(s => s.status === "INVITED").length,
+      suspended: staff.filter(s => s.status === "SUSPENDED" || s.status === "DISABLED").length,
     };
   }, [staff]);
 
@@ -103,7 +106,11 @@ export function StaffManagement() {
     const q = search.trim().toLowerCase();
     return staff.filter(u => {
       if (roleFilter !== "all" && u.role !== roleFilter) return false;
-      if (statusFilter !== "all" && u.status !== statusFilter) return false;
+      if (statusFilter !== "all") {
+        if (statusFilter === "SUSPENDED") {
+          if (u.status !== "SUSPENDED" && u.status !== "DISABLED") return false;
+        } else if (u.status !== statusFilter) return false;
+      }
       if (!q) return true;
       return (
         u.fullName.toLowerCase().includes(q) ||
@@ -228,14 +235,11 @@ export function StaffManagement() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
-        {user.status !== "ACTIVE" && (
-          <DropdownMenuItem onClick={() => setStatus(user, "ACTIVE")}>Activate</DropdownMenuItem>
-        )}
-        {user.status !== "SUSPENDED" && user.status !== "DISABLED" && (
+        {(user.status === "ACTIVE" || user.status === "INVITED") && (
           <DropdownMenuItem onClick={() => setStatus(user, "SUSPENDED")}>Suspend</DropdownMenuItem>
         )}
-        {user.status !== "DISABLED" && (
-          <DropdownMenuItem onClick={() => setStatus(user, "DISABLED")}>Disable</DropdownMenuItem>
+        {(user.status === "SUSPENDED" || user.status === "DISABLED") && (
+          <DropdownMenuItem onClick={() => setStatus(user, "ACTIVE")}>Activate</DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onDelete(user)}>
@@ -289,7 +293,7 @@ export function StaffManagement() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <Card className="rounded-2xl shadow-card">
           <CardContent className="pt-4 pb-4">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Total Staff</p>
@@ -306,12 +310,6 @@ export function StaffManagement() {
           <CardContent className="pt-4 pb-4">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Suspended</p>
             <p className="text-2xl font-bold tabular-nums mt-1">{summary.suspended}</p>
-          </CardContent>
-        </Card>
-        <Card className="rounded-2xl shadow-card">
-          <CardContent className="pt-4 pb-4">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Disabled</p>
-            <p className="text-2xl font-bold tabular-nums mt-1">{summary.disabled}</p>
           </CardContent>
         </Card>
       </div>
@@ -572,19 +570,13 @@ export function StaffManagement() {
                 >
                   Edit
                 </Button>
-                {viewing.status !== "ACTIVE" && (
-                  <Button type="button" variant="outline" onClick={() => setStatus(viewing, "ACTIVE")}>
-                    Activate
-                  </Button>
-                )}
-                {viewing.status === "ACTIVE" && (
+                {viewing.status === "ACTIVE" || viewing.status === "INVITED" ? (
                   <Button type="button" variant="outline" onClick={() => setStatus(viewing, "SUSPENDED")}>
                     Suspend
                   </Button>
-                )}
-                {viewing.status !== "DISABLED" && (
-                  <Button type="button" variant="outline" onClick={() => setStatus(viewing, "DISABLED")}>
-                    Disable
+                ) : (
+                  <Button type="button" variant="outline" onClick={() => setStatus(viewing, "ACTIVE")}>
+                    Activate
                   </Button>
                 )}
                 <Button type="button" variant="destructive" onClick={() => onDelete(viewing)}>
@@ -635,7 +627,7 @@ export function StaffManagement() {
                     value={editing.status}
                     onChange={e => setEditing({ ...editing, status: e.target.value as StaffAccountStatus })}
                   >
-                    {(["INVITED", "ACTIVE", "SUSPENDED", "DISABLED"] as StaffAccountStatus[]).map(s => (
+                    {(["INVITED", "ACTIVE", "SUSPENDED"] as StaffAccountStatus[]).map(s => (
                       <option key={s} value={s}>
                         {s}
                       </option>

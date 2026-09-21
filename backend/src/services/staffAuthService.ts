@@ -2,6 +2,7 @@ import { getFirebaseAuth, isFirebaseAdminConfigured, verifyIdToken } from "../co
 import { env } from "../config/env";
 import {
   countAdmins,
+  countOtherActiveAdmins,
   createStaffUser,
   findByEmail,
   findByFirebaseUid,
@@ -30,11 +31,13 @@ export class AuthError extends Error {
 }
 
 function assertAccountAccess(user: StaffUser) {
-  if (user.status === "DISABLED") {
-    throw new AuthError("This staff account is disabled.", 403, "ACCOUNT_DISABLED");
-  }
-  if (user.status === "SUSPENDED") {
-    throw new AuthError("This staff account is suspended. Contact your administrator.", 403, "ACCOUNT_SUSPENDED");
+  // DISABLED retained only for legacy records — treat as no access (prefer SUSPENDED going forward)
+  if (user.status === "DISABLED" || user.status === "SUSPENDED") {
+    throw new AuthError(
+      "This staff account is suspended. Contact your administrator.",
+      403,
+      "ACCOUNT_SUSPENDED"
+    );
   }
   if (user.status === "INVITED") {
     throw new AuthError(
@@ -111,7 +114,9 @@ export async function createStaffAccount(input: {
   if (!emailOk) throw new AuthError("Enter a valid email address", 400, "INVALID_EMAIL");
 
   const status = input.status ? normalizeStaffStatus(input.status) : "ACTIVE";
-  if (!status) throw new AuthError("Invalid account status", 400, "INVALID_STATUS");
+  if (!status || status === "DISABLED") {
+    throw new AuthError("Invalid account status. Use ACTIVE, INVITED, or SUSPENDED.", 400, "INVALID_STATUS");
+  }
 
   const email = input.email.trim().toLowerCase();
   let firebaseUid: string | null = null;
@@ -137,7 +142,7 @@ export async function createStaffAccount(input: {
       password: temporaryPassword,
       displayName: input.fullName.trim(),
       emailVerified: false,
-      disabled: status === "DISABLED" || status === "SUSPENDED",
+      disabled: status === "SUSPENDED",
     });
     firebaseUid = fb.uid;
   } catch (err: unknown) {
@@ -223,6 +228,14 @@ export async function ensureBootstrapAdmin(): Promise<void> {
       if (code === "auth/email-already-exists") {
         const u = await auth.getUserByEmail(email);
         firebaseUid = u.uid;
+        await auth
+          .updateUser(u.uid, {
+            password: env.bootstrapAdminPassword,
+            displayName: env.bootstrapAdminName,
+            disabled: false,
+          })
+          .catch(() => undefined);
+        console.log(`[auth] Linked existing Firebase user for bootstrap admin ${email}`);
       } else {
         console.warn("[auth] Bootstrap Firebase user create skipped:", err);
       }
@@ -247,13 +260,25 @@ export function authStatusPayload() {
     firebaseAdminConfigured: isFirebaseAdminConfigured(),
     providers: ["password", "google"],
     staffRoles: ["admin", "doctor", "nurse", "lab", "pharmacy", "billing", "reception"],
-    accountStatuses: ["INVITED", "ACTIVE", "SUSPENDED", "DISABLED"],
+    accountStatuses: ["INVITED", "ACTIVE", "SUSPENDED"],
   };
 }
 
 export async function listStaff() {
   const users = await listStaffUsers();
   return users.map(toPublicStaffUser);
+}
+
+export async function assertNotLastActiveAdmin(target: StaffUser) {
+  if (target.role !== "admin" || target.status !== "ACTIVE") return;
+  const others = await countOtherActiveAdmins(target.id);
+  if (others < 1) {
+    throw new AuthError(
+      "Cannot suspend or delete the final active Admin account.",
+      400,
+      "LAST_ADMIN"
+    );
+  }
 }
 
 export { toPublicStaffUser };

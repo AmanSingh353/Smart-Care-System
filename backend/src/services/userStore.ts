@@ -61,8 +61,7 @@ function fromMongo(
 
 export async function initUserStore(): Promise<void> {
   if (!env.mongoUri) {
-    console.log("[users] Using in-memory staff store (MONGODB_URI not set)");
-    seedDemoStaffIfEmpty();
+    console.log("[users] Using in-memory staff store (MONGODB_URI not set) — no auto-seeded staff");
     return;
   }
   try {
@@ -71,73 +70,11 @@ export async function initUserStore(): Promise<void> {
     }
     StaffModel = mongoose.models.StaffUser || mongoose.model<StaffUserMongo>("StaffUser", StaffUserSchema);
     mongoReady = true;
-    console.log("[users] MongoDB staff store ready");
-    const count = await StaffModel.countDocuments();
-    if (count === 0) {
-      await seedDemoStaffMongo();
-    }
+    console.log("[users] MongoDB staff store ready — no auto-seeded staff");
   } catch (err) {
-    console.error("[users] Mongo connect failed — falling back to in-memory", err);
+    console.error("[users] Mongo connect failed — using empty in-memory store", err);
     mongoReady = false;
-    seedDemoStaffIfEmpty();
   }
-}
-
-/** Fictional demo roster — emails only; passwords live in Firebase, never here. */
-const DEMO_ROSTER: Array<
-  Omit<StaffUser, "id" | "firebaseUid" | "createdAt" | "updatedAt" | "status" | "lastLoginAt"> & {
-    status?: StaffAccountStatus;
-  }
-> = [
-  { email: "admin@smartcare.demo", fullName: "Demo Administrator", role: "admin", department: "Administration", staffId: "ADM-001" },
-  { email: "doctor@smartcare.demo", fullName: "Dr. Demo Physician", role: "doctor", department: "General Medicine", staffId: "DOC-001" },
-  { email: "nurse@smartcare.demo", fullName: "Demo Nurse", role: "nurse", department: "Nursing", staffId: "NUR-001" },
-  { email: "lab@smartcare.demo", fullName: "Demo Lab Tech", role: "lab", department: "Pathology", staffId: "LAB-001" },
-  { email: "pharmacy@smartcare.demo", fullName: "Demo Pharmacist", role: "pharmacy", department: "Pharmacy", staffId: "PHR-001" },
-  { email: "billing@smartcare.demo", fullName: "Demo Billing Officer", role: "billing", department: "Finance", staffId: "BIL-001" },
-  { email: "reception@smartcare.demo", fullName: "Demo Receptionist", role: "reception", department: "Front Desk", staffId: "REC-001" },
-];
-
-function seedDemoStaffIfEmpty() {
-  if (memory.size > 0) return;
-  const now = new Date().toISOString();
-  for (const row of DEMO_ROSTER) {
-    const id = `SU-${seq++}`;
-    memory.set(id, {
-      id,
-      firebaseUid: null,
-      email: row.email.toLowerCase(),
-      fullName: row.fullName,
-      role: row.role,
-      department: row.department,
-      staffId: row.staffId,
-      status: "ACTIVE",
-      createdAt: now,
-      updatedAt: now,
-      lastLoginAt: null,
-    });
-  }
-  console.log(`[users] Seeded ${DEMO_ROSTER.length} demo staff records (no passwords stored)`);
-}
-
-async function seedDemoStaffMongo() {
-  if (!StaffModel) return;
-  const now = new Date();
-  for (const row of DEMO_ROSTER) {
-    await StaffModel.create({
-      firebaseUid: null,
-      email: row.email.toLowerCase(),
-      fullName: row.fullName,
-      role: row.role,
-      department: row.department,
-      staffId: row.staffId,
-      status: "ACTIVE",
-      lastLoginAt: null,
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
-  console.log(`[users] Seeded ${DEMO_ROSTER.length} demo staff records in MongoDB`);
 }
 
 export async function listStaffUsers(): Promise<StaffUser[]> {
@@ -186,10 +123,22 @@ export async function countAdmins(): Promise<number> {
   if (mongoReady && StaffModel) {
     return StaffModel.countDocuments({
       role: "admin",
-      status: { $in: ["ACTIVE", "INVITED"] },
+      status: "ACTIVE",
     });
   }
-  return [...memory.values()].filter(u => u.role === "admin" && (u.status === "ACTIVE" || u.status === "INVITED"))
+  return [...memory.values()].filter(u => u.role === "admin" && u.status === "ACTIVE").length;
+}
+
+/** Active admins excluding a given user id (for last-admin protection). */
+export async function countOtherActiveAdmins(excludeId: string): Promise<number> {
+  if (mongoReady && StaffModel) {
+    return StaffModel.countDocuments({
+      role: "admin",
+      status: "ACTIVE",
+      _id: { $ne: excludeId },
+    });
+  }
+  return [...memory.values()].filter(u => u.role === "admin" && u.status === "ACTIVE" && u.id !== excludeId)
     .length;
 }
 

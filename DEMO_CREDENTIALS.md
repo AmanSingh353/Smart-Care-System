@@ -1,44 +1,46 @@
 # DEMO CREDENTIALS — Smart Care System
 
-**DEMO ONLY** — fictional hackathon access.  
-**Do not commit real production passwords.**
+**DEMO ONLY.** Do not commit real production passwords.
 
-Staff authentication uses **Firebase Authentication** (email/password primary, Google optional).  
+Staff authentication uses **Firebase Authentication**.  
 Smart Care System **never stores staff passwords** in MongoDB or source code.
-
-**Demo passwords are configured separately** (Firebase Console, Admin Staff Management temporary password / reset link, or a private password manager). They are intentionally omitted from this repository.
 
 ---
 
-## Staff demo accounts
+## Staff accounts
 
-| Role | Email | Staff ID | Workspace |
-|------|-------|----------|-----------|
-| Admin | `admin@smartcare.demo` | ADM-001 | `/admin` |
-| Doctor | `doctor@smartcare.demo` | DOC-001 | `/doctor` |
-| Nurse | `nurse@smartcare.demo` | NUR-001 | `/nurse` |
-| Lab | `lab@smartcare.demo` | LAB-001 | `/lab` |
-| Pharmacy | `pharmacy@smartcare.demo` | PHR-001 | `/pharmacy` |
-| Billing | `billing@smartcare.demo` | BIL-001 | `/billing` |
-| Reception | `reception@smartcare.demo` | REC-001 | `/reception` |
+**Staff accounts are created through Admin → Staff Management.**
 
-These emails are seeded as Smart Care System `StaffUser` records on backend startup. Roles are defined by Smart Care System, not by Firebase.
+There are **no** automatically seeded doctor/nurse/lab/pharmacy/billing/reception logins.
 
-### How to set demo passwords
+### First Admin (bootstrap)
 
-1. Firebase Console → Authentication → Users → create each email, **or**  
-2. Admin → Staff Management (creates Firebase + SCS user), **or**  
-3. Match existing seeded SCS email in Console, then first login links `firebaseUid`.
+Configure backend environment (never commit real values):
+
+```env
+BOOTSTRAP_ADMIN_EMAIL=your-admin@example.com
+# BOOTSTRAP_ADMIN_PASSWORD=   # optional, backend-only
+```
+
+On startup, if no active Admin exists, the backend creates/links that Admin StaffUser.  
+Demo passwords are configured separately (Firebase Console or bootstrap password env).
+
+Then:
+
+1. Sign in as Admin  
+2. Open **Staff Management** (`/admin/staff`)  
+3. **Add Staff** for each role needed for the demo  
 
 ---
 
 ## Family access (separate)
 
-Login → Family → Patient ID (e.g. `SCS-1001`).  
+Login → Family → Patient ID (e.g. from Reception registration).  
 Family never receives staff roles.
 
 ---
 
-## Reset clinical demo data
+## Clinical demo data
 
-Admin → Reset Demo Data. Does not delete Firebase Auth users or staff role records.
+Patient/clinical demo seed data may still exist for product demos.  
+That is separate from staff authentication records.

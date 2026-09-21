@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import {
   AuthError,
   authStatusPayload,
+  assertNotLastActiveAdmin,
   createStaffAccount,
   listStaff,
   resolveStaffSession,
@@ -129,8 +130,14 @@ export const staffAuthController = {
       if (typeof staffId === "string") patch.staffId = staffId;
       if (typeof status === "string") {
         const normalized = normalizeStaffStatus(status);
-        if (!normalized) {
-          return res.status(400).json({ error: "INVALID_STATUS", message: "Invalid account status" });
+        if (!normalized || normalized === "DISABLED") {
+          return res.status(400).json({
+            error: "INVALID_STATUS",
+            message: "Use ACTIVE, INVITED, or SUSPENDED. Disable was removed — use Suspend.",
+          });
+        }
+        if (normalized === "SUSPENDED") {
+          await assertNotLastActiveAdmin(existing);
         }
         patch.status = normalized;
       }
@@ -143,11 +150,11 @@ export const staffAuthController = {
       }
       const updated = await updateStaffUser(id, patch);
 
-      // Keep Firebase disabled flag in sync for SUSPENDED / DISABLED
+      // Sync Firebase disabled flag with Suspend / Activate
       if (updated?.firebaseUid && patch.status) {
         const auth = getFirebaseAuth();
         if (auth) {
-          const disabled = patch.status === "DISABLED" || patch.status === "SUSPENDED";
+          const disabled = patch.status === "SUSPENDED";
           await auth.updateUser(updated.firebaseUid, { disabled }).catch(() => undefined);
         }
       }
@@ -169,6 +176,7 @@ export const staffAuthController = {
       if (req.user?.userId && req.user.userId === id) {
         return res.status(400).json({ error: "CANNOT_DELETE_SELF", message: "You cannot delete your own account" });
       }
+      await assertNotLastActiveAdmin(existing);
       if (existing.firebaseUid) {
         const auth = getFirebaseAuth();
         if (auth) {
@@ -178,7 +186,10 @@ export const staffAuthController = {
         }
       }
       await deleteStaffUser(id);
-      return res.json({ message: "Staff account deleted", id });
+      return res.json({
+        message: "Staff login removed. Historical hospital records are preserved.",
+        id,
+      });
     } catch (err) {
       return handleAuthError(res, err);
     }
