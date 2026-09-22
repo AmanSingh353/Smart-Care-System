@@ -199,6 +199,7 @@ async function recoverBootstrapAdminSession(uid: string, email: string): Promise
     staffId: "ADM-BOOTSTRAP",
     status: "ACTIVE",
     firebaseUid: uid,
+    mustChangePassword: false,
   });
 }
 
@@ -209,9 +210,8 @@ export async function createStaffAccount(input: {
   department: string;
   staffId: string;
   status?: string;
-  temporaryPassword?: string;
-  sendResetEmail?: boolean;
-}): Promise<{ user: StaffUser; temporaryPassword?: string; passwordResetLink?: string }> {
+  temporaryPassword: string;
+}): Promise<{ user: StaffUser }> {
   const role = normalizeStaffRole(input.role);
   if (!role || !CREATABLE_STAFF_ROLES.includes(role)) {
     throw new AuthError("Invalid staff role", 400, "INVALID_ROLE");
@@ -222,15 +222,22 @@ export async function createStaffAccount(input: {
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email.trim());
   if (!emailOk) throw new AuthError("Enter a valid email address", 400, "INVALID_EMAIL");
 
+  const temporaryPassword = input.temporaryPassword?.trim() || "";
+  if (temporaryPassword.length < 8) {
+    throw new AuthError("Temporary password must be at least 8 characters.", 400, "INVALID_PASSWORD");
+  }
+
   const status = input.status ? normalizeStaffStatus(input.status) : "ACTIVE";
   if (!status || status === "DISABLED") {
     throw new AuthError("Invalid account status. Use ACTIVE, INVITED, or SUSPENDED.", 400, "INVALID_STATUS");
   }
 
   const email = input.email.trim().toLowerCase();
-  let firebaseUid: string | null = null;
-  let temporaryPassword = input.temporaryPassword?.trim() || undefined;
-  let passwordResetLink: string | undefined;
+
+  const existingStaff = await findByEmail(email);
+  if (existingStaff) {
+    throw new AuthError("A staff user with this email already exists", 409, "DUPLICATE_EMAIL");
+  }
 
   const auth = getFirebaseAuth();
   if (!auth) {
@@ -241,10 +248,7 @@ export async function createStaffAccount(input: {
     );
   }
 
-  if (!temporaryPassword) {
-    temporaryPassword = `Scs!${Math.random().toString(36).slice(2, 10)}A1`;
-  }
-
+  let firebaseUid: string;
   try {
     const fb = await auth.createUser({
       email,
@@ -257,27 +261,24 @@ export async function createStaffAccount(input: {
   } catch (err: unknown) {
     const code = err && typeof err === "object" && "code" in err ? String((err as { code: string }).code) : "";
     if (code === "auth/email-already-exists") {
-      const existing = await auth.getUserByEmail(email);
-      firebaseUid = existing.uid;
-      temporaryPassword = undefined;
-    } else {
       throw new AuthError(
-        err instanceof Error ? err.message : "Failed to create Firebase user",
-        502,
-        "FIREBASE_CREATE_FAILED"
+        "A Firebase account already exists for this email.",
+        409,
+        "FIREBASE_EMAIL_EXISTS"
       );
     }
-  }
-
-  try {
-    passwordResetLink = await auth.generatePasswordResetLink(email);
-  } catch {
-    /* optional — Admin can share temporary password for demo */
-  }
-
-  if (input.sendResetEmail !== false && passwordResetLink) {
-    // Firebase Admin does not send email by itself without an email provider;
-    // link is returned to Admin UI for secure sharing / demo onboarding.
+    if (code === "auth/invalid-password" || code === "auth/weak-password") {
+      throw new AuthError(
+        "Temporary password does not meet Firebase password requirements.",
+        400,
+        "INVALID_PASSWORD"
+      );
+    }
+    throw new AuthError(
+      err instanceof Error ? err.message : "Failed to create Firebase user",
+      502,
+      "FIREBASE_CREATE_FAILED"
+    );
   }
 
   try {
@@ -289,13 +290,26 @@ export async function createStaffAccount(input: {
       staffId: input.staffId,
       status: status === "INVITED" ? "INVITED" : status,
       firebaseUid,
+      mustChangePassword: true,
     });
-    return { user, temporaryPassword, passwordResetLink };
+    // Password is never returned or stored — Admin UI keeps the value they typed in memory only.
+    return { user };
   } catch (err: unknown) {
+    // Roll back orphaned Firebase Auth user if StaffUser create fails
+    await auth.deleteUser(firebaseUid).catch(() => undefined);
     const statusCode = (err as { status?: number }).status || 500;
     const code = (err as { code?: string }).code || "CREATE_FAILED";
     throw new AuthError(err instanceof Error ? err.message : "Failed to create staff user", statusCode, code);
   }
+}
+
+/** Clear first-login password-change flag after the staff member updates their Firebase password. */
+export async function completePasswordChange(userId: string): Promise<StaffUser> {
+  const user = await updateStaffUser(userId, { mustChangePassword: false });
+  if (!user) {
+    throw new AuthError("Staff user not found", 404, "NOT_FOUND");
+  }
+  return user;
 }
 
 /** Bootstrap first admin when none exists — uses BOOTSTRAP_ADMIN_EMAIL only.
@@ -379,6 +393,7 @@ export async function ensureBootstrapAdmin(): Promise<void> {
     staffId: "ADM-BOOTSTRAP",
     status: "ACTIVE",
     firebaseUid,
+    mustChangePassword: false,
   });
   console.log(`[auth] Bootstrap admin StaffUser created for ${email} (Firebase password unchanged)`);
 }

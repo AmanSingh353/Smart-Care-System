@@ -20,6 +20,7 @@ interface StaffUserMongo {
   department: string;
   staffId: string;
   status: StaffAccountStatus;
+  mustChangePassword: boolean;
   lastLoginAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -34,6 +35,7 @@ const StaffUserSchema = new Schema<StaffUserMongo>(
     department: { type: String, default: "" },
     staffId: { type: String, required: true, unique: true },
     status: { type: String, required: true, enum: STAFF_STATUSES },
+    mustChangePassword: { type: Boolean, default: false },
     lastLoginAt: { type: Date, default: null },
   },
   { timestamps: true }
@@ -53,6 +55,7 @@ function fromMongo(
     department: doc.department,
     staffId: doc.staffId,
     status: doc.status,
+    mustChangePassword: Boolean(doc.mustChangePassword),
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
     lastLoginAt: doc.lastLoginAt ? doc.lastLoginAt.toISOString() : null,
@@ -150,6 +153,7 @@ export async function createStaffUser(input: {
   staffId: string;
   status?: StaffAccountStatus;
   firebaseUid?: string | null;
+  mustChangePassword?: boolean;
 }): Promise<StaffUser> {
   const email = input.email.trim().toLowerCase();
   const staffId = input.staffId.trim();
@@ -161,6 +165,7 @@ export async function createStaffUser(input: {
   if (existingId) {
     throw Object.assign(new Error("A staff user with this Staff ID already exists"), { status: 409, code: "DUPLICATE_STAFF_ID" });
   }
+  const mustChangePassword = Boolean(input.mustChangePassword);
   if (mongoReady && StaffModel) {
     const doc = await StaffModel.create({
       firebaseUid: input.firebaseUid ?? null,
@@ -170,6 +175,7 @@ export async function createStaffUser(input: {
       department: input.department.trim(),
       staffId,
       status: input.status || "ACTIVE",
+      mustChangePassword,
       lastLoginAt: null,
     });
     return fromMongo(doc as never);
@@ -185,6 +191,7 @@ export async function createStaffUser(input: {
     department: input.department.trim(),
     staffId,
     status: input.status || "ACTIVE",
+    mustChangePassword,
     createdAt: now,
     updatedAt: now,
     lastLoginAt: null,
@@ -196,7 +203,10 @@ export async function createStaffUser(input: {
 export async function updateStaffUser(
   id: string,
   patch: Partial<
-    Pick<StaffUser, "fullName" | "role" | "department" | "staffId" | "status" | "firebaseUid" | "lastLoginAt">
+    Pick<
+      StaffUser,
+      "fullName" | "role" | "department" | "staffId" | "status" | "firebaseUid" | "lastLoginAt" | "mustChangePassword"
+    >
   >
 ): Promise<StaffUser | null> {
   if (patch.staffId) {

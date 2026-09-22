@@ -8,6 +8,9 @@ import {
   sendPasswordResetEmail,
   signOut,
   onAuthStateChanged,
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
   type User,
 } from "firebase/auth";
 
@@ -85,4 +88,16 @@ export function watchAuth(cb: (user: User | null) => void) {
     return () => undefined;
   }
   return onAuthStateChanged(getFirebaseAuth(), cb);
+}
+
+/** Change password for the currently signed-in Firebase user (client SDK). Never touches SCS DB for the secret. */
+export async function firebaseChangePassword(currentPassword: string, newPassword: string) {
+  const a = getFirebaseAuth();
+  const user = a.currentUser;
+  if (!user || !user.email) {
+    throw Object.assign(new Error("Not signed in"), { code: "auth/no-current-user" });
+  }
+  const cred = EmailAuthProvider.credential(user.email, currentPassword);
+  await reauthenticateWithCredential(user, cred);
+  await updatePassword(user, newPassword);
 }

@@ -79,6 +79,10 @@ export const StaffLayout = ({ children, allowedRoles }: { children: ReactNode; a
     return <Navigate to="/login" replace />;
   }
 
+  if (staff?.mustChangePassword) {
+    return <Navigate to="/change-password" replace />;
+  }
+
   if (allowedRoles && !allowedRoles.includes(role) && role !== "admin") {
     const home = ROLE_NAV[role]?.[0]?.path || "/login";
     return <Navigate to={home} replace />;

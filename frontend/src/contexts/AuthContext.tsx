@@ -33,6 +33,7 @@ interface AuthContextType {
   loginFamily: (patientId: string) => void;
   logout: () => Promise<void>;
   getAccessToken: () => Promise<string | null>;
+  refreshStaffSession: () => Promise<StaffProfile>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -70,6 +71,11 @@ const ROLE_ROUTES: Record<StaffRole, string> = {
 
 export function workspacePathForRole(role: StaffRole): string {
   return ROLE_ROUTES[role];
+}
+
+export function postLoginPath(profile: StaffProfile): string {
+  if (profile.mustChangePassword) return "/change-password";
+  return workspacePathForRole(profile.role);
 }
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
@@ -260,6 +266,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         loginFamily,
         logout,
         getAccessToken,
+        refreshStaffSession: () => establishStaffSession(true),
       }}
     >
       {children}
@@ -284,6 +291,15 @@ export function formatAuthError(err: unknown): string {
     if (code === "ACCOUNT_INVITED") return "Account invited but not activated yet.";
     if (code === "NOT_REGISTERED") {
       return isDev ? `Staff account not found (${code}).` : err.message;
+    }
+    if (code === "FIREBASE_EMAIL_EXISTS") {
+      return "A Firebase account already exists for this email.";
+    }
+    if (code === "DUPLICATE_EMAIL") {
+      return "A staff user with this email already exists.";
+    }
+    if (code === "INVALID_PASSWORD") {
+      return err.message || "Password does not meet requirements.";
     }
     if (code === "FIREBASE_NOT_CONFIGURED") {
       return isDev

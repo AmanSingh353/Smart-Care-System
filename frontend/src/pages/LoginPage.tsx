@@ -9,7 +9,7 @@ import { Stethoscope, Users, UserPlus, ArrowLeft } from "lucide-react";
 import {
   useAuth,
   formatAuthError,
-  workspacePathForRole,
+  postLoginPath,
 } from "@/contexts/AuthContext";
 
 const LoginPage = () => {
@@ -44,7 +44,7 @@ const LoginPage = () => {
     setBusy(true);
     try {
       const profile = await loginStaffEmailPassword(email, password);
-      navigate(workspacePathForRole(profile.role));
+      navigate(postLoginPath(profile));
     } catch (err) {
       setError(formatAuthError(err));
     } finally {
@@ -62,7 +62,7 @@ const LoginPage = () => {
     setBusy(true);
     try {
       const profile = await loginStaffGoogle();
-      navigate(workspacePathForRole(profile.role));
+      navigate(postLoginPath(profile));
     } catch (err) {
       setError(formatAuthError(err));
     } finally {

@@ -13,6 +13,7 @@ export interface StaffProfile {
   department: string;
   staffId: string;
   status: StaffAccountStatus;
+  mustChangePassword?: boolean;
   createdAt: string;
   updatedAt: string;
   lastLoginAt: string | null;
@@ -38,6 +39,13 @@ export const authService = {
   me: (idToken: string) =>
     api.get<{ user: StaffProfile }>("/api/auth/me", { Authorization: `Bearer ${idToken}` }),
 
+  completePasswordChange: (idToken: string) =>
+    api.post<{ user: StaffProfile; message: string }>(
+      "/api/auth/complete-password-change",
+      {},
+      { Authorization: `Bearer ${idToken}` }
+    ),
+
   listStaff: (idToken: string) =>
     api.get<{ staff: StaffProfile[] }>("/api/auth/staff", { Authorization: `Bearer ${idToken}` }),
 
@@ -53,13 +61,11 @@ export const authService = {
       department: string;
       staffId: string;
       status?: StaffAccountStatus;
-      temporaryPassword?: string;
+      temporaryPassword: string;
     }
   ) =>
     api.post<{
       user: StaffProfile;
-      temporaryPassword?: string;
-      passwordResetLink?: string;
       message: string;
     }>("/api/auth/staff", body, { Authorization: `Bearer ${idToken}` }),
 

@@ -21,6 +21,7 @@ import LabPage from "./pages/LabPage";
 import CareGuardDashboard from "./pages/CareGuardDashboard";
 import NotFound from "./pages/NotFound";
 import FirebaseOnlyTestPage from "./pages/FirebaseOnlyTestPage";
+import ChangePasswordPage from "./pages/ChangePasswordPage";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +37,7 @@ const App = () => (
               <Routes>
                 <Route path="/" element={<LandingPage />} />
                 <Route path="/login" element={<LoginPage />} />
+                <Route path="/change-password" element={<ChangePasswordPage />} />
                 <Route path="/register" element={<RegisterPage />} />
                 <Route path="/reception" element={<ReceptionPage />} />
                 <Route path="/admin" element={<AdminDashboard />} />

@@ -26,7 +26,7 @@ import {
   type StaffProfile,
   type StaffRole,
 } from "@/services/authService";
-import { MoreHorizontal, Plus, Search, Users } from "lucide-react";
+import { MoreHorizontal, Plus, Search, Users, Eye, EyeOff, Copy, Check } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const CREATABLE_ROLES: StaffRole[] = ["doctor", "nurse", "lab", "pharmacy", "billing", "reception"];
@@ -41,6 +41,7 @@ const FILTER_STATUSES: Array<"all" | "ACTIVE" | "INVITED" | "SUSPENDED"> = [
 const emptyForm = {
   fullName: "",
   email: "",
+  temporaryPassword: "",
   role: "doctor" as StaffRole,
   department: "",
   staffId: "",
@@ -77,6 +78,13 @@ export function StaffManagement() {
   const [statusFilter, setStatusFilter] = useState<StaffAccountStatus | "all">("all");
   const [form, setForm] = useState(emptyForm);
   const [addOpen, setAddOpen] = useState(false);
+  const [showTempPassword, setShowTempPassword] = useState(false);
+  const [createdCredentials, setCreatedCredentials] = useState<{
+    email: string;
+    temporaryPassword: string;
+  } | null>(null);
+  const [revealCreatedPassword, setRevealCreatedPassword] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [viewing, setViewing] = useState<StaffProfile | null>(null);
   const [editing, setEditing] = useState<StaffProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -125,6 +133,9 @@ export function StaffManagement() {
     if (!data.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email.trim())) {
       return "Enter a valid email address.";
     }
+    if (!data.temporaryPassword || data.temporaryPassword.length < 8) {
+      return "Temporary password must be at least 8 characters.";
+    }
     if (!data.staffId.trim()) return "Staff ID is required.";
     if (!CREATABLE_ROLES.includes(data.role)) return "Select a valid role.";
     return null;
@@ -139,24 +150,29 @@ export function StaffManagement() {
       setError(v);
       return;
     }
+    const passwordForShare = form.temporaryPassword;
+    const emailForShare = form.email.trim().toLowerCase();
     setBusy(true);
     try {
       const token = await getAccessToken();
       if (!token) throw new Error("Not authenticated");
-      const res = await authService.createStaff(token, {
+      await authService.createStaff(token, {
         fullName: form.fullName.trim(),
-        email: form.email.trim(),
+        email: emailForShare,
         role: form.role,
         department: form.department.trim(),
         staffId: form.staffId.trim(),
         status: form.status,
+        temporaryPassword: passwordForShare,
       });
-      const parts = [res.message];
-      if (res.temporaryPassword) parts.push(`Temporary password (share securely): ${res.temporaryPassword}`);
-      if (res.passwordResetLink) parts.push("Password reset link generated — share securely.");
-      setMessage(parts.join(" "));
       setForm(emptyForm);
+      setShowTempPassword(false);
       setAddOpen(false);
+      setRevealCreatedPassword(false);
+      setCopied(false);
+      // Keep password only in React state for one-time Admin share — never localStorage / never from API
+      setCreatedCredentials({ email: emailForShare, temporaryPassword: passwordForShare });
+      setMessage("Staff account created successfully.");
       await refresh();
     } catch (err) {
       setError(formatAuthError(err));
@@ -440,12 +456,22 @@ export function StaffManagement() {
       </div>
 
       {/* Add Staff dialog */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      <Dialog
+        open={addOpen}
+        onOpenChange={open => {
+          setAddOpen(open);
+          if (!open) {
+            setShowTempPassword(false);
+            setForm(emptyForm);
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-lg rounded-2xl">
           <DialogHeader>
             <DialogTitle>Add Staff</DialogTitle>
             <DialogDescription>
-              Creates a Firebase Auth identity and Smart Care System staff record. Passwords are never stored in MongoDB.
+              Creates a Firebase Auth identity and Smart Care System staff record. Passwords are never
+              stored in MongoDB.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={onCreate} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -467,6 +493,33 @@ export function StaffManagement() {
                 onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                 required
               />
+            </div>
+            <div className="sm:col-span-2">
+              <Label htmlFor="temp-password">Temporary Password</Label>
+              <div className="relative mt-1">
+                <Input
+                  id="temp-password"
+                  type={showTempPassword ? "text" : "password"}
+                  className="rounded-xl pr-10"
+                  value={form.temporaryPassword}
+                  onChange={e => setForm(f => ({ ...f, temporaryPassword: e.target.value }))}
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground"
+                  onClick={() => setShowTempPassword(v => !v)}
+                  aria-label={showTempPassword ? "Hide password" : "Show password"}
+                >
+                  {showTempPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Temporary password is used for the staff member&apos;s first login. The password is not
+                stored in Smart Care System.
+              </p>
             </div>
             <div>
               <Label>Role</Label>
@@ -509,6 +562,87 @@ export function StaffManagement() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* One-time credentials share dialog (password from form memory only) */}
+      <Dialog
+        open={!!createdCredentials}
+        onOpenChange={open => {
+          if (!open) {
+            setCreatedCredentials(null);
+            setRevealCreatedPassword(false);
+            setCopied(false);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Staff account created successfully.</DialogTitle>
+            <DialogDescription>
+              Share these credentials securely. The password will not be shown again.
+            </DialogDescription>
+          </DialogHeader>
+          {createdCredentials && (
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="text-[10px] uppercase text-muted-foreground font-semibold">Email</p>
+                <p className="font-medium break-all">{createdCredentials.email}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase text-muted-foreground font-semibold">
+                  Temporary password
+                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <code className="flex-1 rounded-lg bg-muted px-3 py-2 font-mono text-sm">
+                    {revealCreatedPassword
+                      ? createdCredentials.temporaryPassword
+                      : "••••••••"}
+                  </code>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setRevealCreatedPassword(v => !v)}
+                  >
+                    {revealCreatedPassword ? "Hide" : "Show"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(createdCredentials.temporaryPassword);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      } catch {
+                        setError("Could not copy to clipboard.");
+                      }
+                    }}
+                  >
+                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                    <span className="ml-1">{copied ? "Copied" : "Copy password"}</span>
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                Share these credentials securely. The password will not be shown again.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              onClick={() => {
+                setCreatedCredentials(null);
+                setRevealCreatedPassword(false);
+                setCopied(false);
+              }}
+            >
+              Done
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -22,6 +22,8 @@ export interface StaffUser {
   department: string;
   staffId: string;
   status: StaffAccountStatus;
+  /** True after Admin creates account with a temporary password; cleared after first password change. */
+  mustChangePassword: boolean;
   createdAt: string;
   updatedAt: string;
   lastLoginAt: string | null;
@@ -67,6 +69,7 @@ export function toPublicStaffUser(u: StaffUser) {
     department: u.department,
     staffId: u.staffId,
     status: u.status,
+    mustChangePassword: Boolean(u.mustChangePassword),
     createdAt: u.createdAt,
     updatedAt: u.updatedAt,
     lastLoginAt: u.lastLoginAt,

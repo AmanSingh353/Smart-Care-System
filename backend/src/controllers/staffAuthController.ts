@@ -3,6 +3,7 @@ import {
   AuthError,
   authStatusPayload,
   assertNotLastActiveAdmin,
+  completePasswordChange,
   createStaffAccount,
   listStaff,
   resolveStaffSession,
@@ -109,13 +110,22 @@ export const staffAuthController = {
       });
       return res.status(201).json({
         user: toPublicStaffUser(result.user),
-        temporaryPassword: result.temporaryPassword,
-        passwordResetLink: result.passwordResetLink,
-        message: result.passwordResetLink
-          ? "Staff created. Share the password reset link (or temporary password) securely. Nothing is stored in MongoDB."
-          : result.temporaryPassword
-            ? "Staff created. Share the temporary password securely; it is not stored by Smart Care System."
-            : "Staff record linked to existing Firebase Auth user.",
+        message: "Staff account created successfully.",
+      });
+    } catch (err) {
+      return handleAuthError(res, err);
+    }
+  },
+
+  async completePasswordChange(req: Request, res: Response) {
+    try {
+      if (!req.staffUser) {
+        return res.status(401).json({ error: "UNAUTHORIZED", message: "Not authenticated" });
+      }
+      const user = await completePasswordChange(req.staffUser.id);
+      return res.json({
+        user: toPublicStaffUser(user),
+        message: "Password change recorded.",
       });
     } catch (err) {
       return handleAuthError(res, err);
