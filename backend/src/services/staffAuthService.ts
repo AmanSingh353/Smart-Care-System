@@ -80,21 +80,41 @@ export async function resolveStaffSession(
 
   let user = await findByFirebaseUid(uid);
   authDiag("STAFF_LOOKUP_BY_UID", { result: user ? "FOUND" : "NOT_FOUND" });
+  authDiag("AUTHENTICATED_IDENTITY", {
+    email: email || undefined,
+    currentFirebaseUidPresent: Boolean(uid),
+  });
+
+  const bootstrapMatch = isBootstrapAdminEmail(email);
+  authDiag("BOOTSTRAP_ADMIN_MATCH", { match: bootstrapMatch ? "TRUE" : "FALSE" });
 
   if (!user && email) {
     user = await findByEmail(email);
-    authDiag("STAFF_LOOKUP_BY_EMAIL", { result: user ? "FOUND" : "NOT_FOUND" });
+    authDiag("STAFF_LOOKUP_BY_EMAIL", {
+      result: user ? "FOUND" : "NOT_FOUND",
+      storedFirebaseUidPresent: Boolean(user?.firebaseUid),
+      role: user?.role,
+      status: user?.status,
+    });
     if (user && !user.firebaseUid) {
       user = (await linkFirebaseUid(email, uid)) || user;
+      authDiag("STAFF_UID_LINKED", { email });
     } else if (user && user.firebaseUid && user.firebaseUid !== uid) {
-      throw new AuthError("This account is linked to a different identity provider.", 403, "IDENTITY_MISMATCH");
+      // Bootstrap Admin only: Firebase user may have been recreated — replace stale UID
+      if (bootstrapMatch && user.role === "admin" && user.status === "ACTIVE") {
+        authDiag("BOOTSTRAP_ADMIN_UID_RELINK", {
+          email,
+          staleUidPresent: true,
+          newUidPresent: true,
+        });
+        user = (await updateStaffUser(user.id, { firebaseUid: uid })) || user;
+      } else {
+        throw new AuthError("This account is linked to a different identity provider.", 403, "IDENTITY_MISMATCH");
+      }
     }
   } else if (!user) {
     authDiag("STAFF_LOOKUP_BY_EMAIL", { result: "SKIPPED_NO_EMAIL" });
   }
-
-  const bootstrapMatch = isBootstrapAdminEmail(email);
-  authDiag("BOOTSTRAP_ADMIN_MATCH", { match: bootstrapMatch ? "TRUE" : "FALSE" });
 
   // Recover existing Firebase Admin → SCS ADMIN mapping (bootstrap email only)
   if (!user) {

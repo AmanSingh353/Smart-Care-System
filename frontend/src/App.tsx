@@ -20,6 +20,7 @@ import FamilyDashboard from "./pages/FamilyDashboard";
 import LabPage from "./pages/LabPage";
 import CareGuardDashboard from "./pages/CareGuardDashboard";
 import NotFound from "./pages/NotFound";
+import FirebaseOnlyTestPage from "./pages/FirebaseOnlyTestPage";
 
 const queryClient = new QueryClient();
 
@@ -46,6 +47,9 @@ const App = () => (
                 <Route path="/billing" element={<BillingPage />} />
                 <Route path="/lab" element={<LabPage />} />
                 <Route path="/family/:patientId" element={<FamilyDashboard />} />
+                {import.meta.env.DEV && (
+                  <Route path="/dev/firebase-only-test" element={<FirebaseOnlyTestPage />} />
+                )}
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>
