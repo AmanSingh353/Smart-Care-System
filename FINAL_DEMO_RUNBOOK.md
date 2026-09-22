@@ -27,12 +27,14 @@ npm run dev
 
 ### Prep (once)
 
-1. Login as **Admin** → **Reset Demo Data** (confirm).  
-2. Confirm DEMO MODE banner is visible.
+1. Ensure Firebase + `BOOTSTRAP_ADMIN_EMAIL` are configured (see `DEMO_CREDENTIALS.md`).  
+2. Login as **Admin** (email + password) → **Reset Demo Data** (confirm).  
+3. Confirm DEMO MODE banner is visible.  
+4. Ensure demo staff roles exist via **Staff Management** if you will switch roles live.
 
 ### Access
 
-See `DEMO_CREDENTIALS.md` — role-select staff login; Family uses Patient ID.
+See `DEMO_CREDENTIALS.md` — staff use Firebase email/password; Family uses Patient ID.
 
 ---
 
@@ -51,7 +53,7 @@ Do not linger on the landing page.
 
 ## 0:30 — REGISTRATION
 
-1. Login → **Reception**.  
+1. Login → staff email/password for **Reception** (or Admin navigating to Registration).  
 2. **Fill canonical demo patient** → **Arjun Verma**.  
 3. Register → show Patient ID (`SCS-####`).  
 
@@ -124,7 +126,7 @@ This is the **main differentiation moment**.
 ## 4:00 — ADMIN
 
 1. Login → **Admin**.  
-2. Show overview · patient flow · CareGuard summary.  
+2. Show overview · patient flow · CareGuard summary · Staff Management briefly.  
 
 **Say:**  
 “Management sees the same connected ecosystem.”
@@ -153,4 +155,5 @@ Open `/careguard`.
 1. Admin → **Reset Demo Data**.  
 2. Hard refresh once.  
 3. Continue from Registration.  
-4. Backend optional for core demo (PatientContext + local CareGuard still work).
+4. Confirm backend health and Firebase staff login if role switch fails.  
+5. Clinical path still works offline (PatientContext + local CareGuard) if API is down — staff auth requires backend + Firebase.

@@ -9,17 +9,97 @@ Connected hospital care through **one unified patient record**.
 Smart-Care-System/
 ├── frontend/          # React + Vite + TypeScript + Tailwind
 ├── backend/           # Express + TypeScript + Socket.io
+├── README.md
 ├── DEMO_CREDENTIALS.md
 ├── FINAL_DEMO_RUNBOOK.md
 ├── FINAL_PRESENTATION_CHECKLIST.md
-├── FINAL_RELEASE_REPORT.md
-└── README.md
+├── package.json
+├── vercel.json
+└── .gitignore
 ```
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 18+ (Node 20 LTS recommended)
 - npm
+- Firebase project (Email/Password enabled; optional Google)
+- MongoDB URI optional (empty = in-memory staff store for local/demo)
+
+---
+
+## Architecture
+
+```text
+Browser (Vite SPA)
+  ├── PatientContext          — shared clinical patient record (demo persistence)
+  ├── CareGuardContext        — workflow attention signals (local + API sync)
+  └── AuthContext             — Firebase ID token → backend session → role
+
+Backend (Express)
+  ├── /api/auth/*             — Firebase token verify + StaffUser roles
+  ├── /api/careguard/*        — CareGuard signals / sync
+  ├── Socket.io               — live CareGuard events
+  └── StaffUser store         — MongoDB if MONGODB_URI set, else in-memory
+```
+
+| Concern | Source of truth |
+|---------|-----------------|
+| Identity (who) | Firebase Authentication |
+| Hospital role (what) | Smart Care `StaffUser.role` (backend only) |
+| Clinical demo data | Frontend `PatientContext` |
+| CareGuard signals | Rules engine + optional backend sync |
+
+The frontend must never assign itself a privileged role.
+
+---
+
+## Authentication
+
+**Primary staff login:** email + password (Firebase).  
+**Optional:** Continue with Google (registered staff only).  
+**Family:** Patient ID only (not a staff role).
+
+Flow:
+
+```text
+Staff email/password (or Google)
+  → Firebase ID token
+  → POST /api/auth/session
+  → Backend verifies token
+  → StaffUser lookup (UID / email / bootstrap Admin)
+  → Authoritative role → workspace
+```
+
+**First Admin:** set `BOOTSTRAP_ADMIN_EMAIL` on the backend (existing Firebase Admin email).  
+**All other staff:** Admin → Staff Management → Add Staff (creates Firebase Auth user + StaffUser).
+
+Passwords are never stored in MongoDB or application source.
+
+See [DEMO_CREDENTIALS.md](./DEMO_CREDENTIALS.md).
+
+### Roles
+
+| Role | Typical workspace |
+|------|-------------------|
+| `admin` | `/admin`, Staff Management `/admin/staff` |
+| `reception` | `/reception` |
+| `doctor` | `/doctor` |
+| `nurse` | `/nurse` |
+| `lab` | `/lab` |
+| `pharmacy` | `/pharmacy` |
+| `billing` | `/billing` |
+| Family | `/family/:patientId` |
+
+Account statuses: `ACTIVE`, `INVITED`, `SUSPENDED` (Suspend/Activate; Delete removes Auth + StaffUser).
+
+---
+
+## CareGuard
+
+CareGuard watches the shared patient journey and raises **attention signals** (e.g. lab result awaiting review, overdue steps). Humans review and resolve — the system does not auto-act clinically.
+
+- Dashboard: `/careguard`
+- Works offline via local engine; with backend up, syncs over API + Socket.io
 
 ---
 
@@ -30,12 +110,14 @@ Smart-Care-System/
 cd backend
 npm install
 cp .env.example .env   # Windows: copy .env.example .env
+# Fill Firebase Admin + BOOTSTRAP_ADMIN_EMAIL (see below)
 npm run dev
 
 # Terminal 2 — UI
 cd frontend
 npm install
 cp .env.example .env
+# Fill VITE_FIREBASE_* and VITE_API_URL
 npm run dev
 ```
 
@@ -45,79 +127,99 @@ npm run dev
 | Backend | http://localhost:5000 |
 | Health | http://localhost:5000/api/health |
 
-The UI works **offline** (PatientContext + local CareGuard). With the backend running you also get CareGuard API sync and Socket.io live events.
+Clinical UI works offline (PatientContext + local CareGuard). Backend adds auth, staff management, CareGuard API sync, and Socket.io.
 
 ---
 
 ## Environment variables
 
-### Frontend (`frontend/.env` — from `.env.example`)
+**Never commit `.env` files.** Use `frontend/.env.example` and `backend/.env.example`.
+
+### Frontend (`frontend/.env`)
 
 | Variable | Purpose |
 |----------|---------|
-| `VITE_API_URL` | Backend base URL (no trailing slash) |
-| `VITE_DEMO_MODE` | `true` for deterministic demo |
-| `VITE_CAREGUARD_LAB_DELAY_MINUTES` | Optional lab delay threshold |
-| `VITE_CAREGUARD_TREATMENT_GRACE_MINUTES` | Optional overdue grace |
+| `VITE_API_URL` | Backend base URL (no trailing slash). Empty/`/` for same-origin deploy. |
+| `VITE_DEMO_MODE` | `true` for deterministic demo patients |
+| `VITE_FIREBASE_API_KEY` | Firebase web client |
+| `VITE_FIREBASE_AUTH_DOMAIN` | Firebase web client |
+| `VITE_FIREBASE_PROJECT_ID` | Firebase web client |
+| `VITE_FIREBASE_APP_ID` | Firebase web client |
+| `VITE_CAREGUARD_*` | Optional thresholds (minutes) |
 
-### Backend (`backend/.env` — from `.env.example`)
+Do **not** put Admin SDK keys, MongoDB URIs, or bootstrap passwords in `VITE_*`.
+
+### Backend (`backend/.env`)
 
 | Variable | Purpose |
 |----------|---------|
-| `PORT` | API port (default `5000`) |
+| `PORT` / `HOST` | Listen address (default `5000` / `0.0.0.0`) |
 | `CLIENT_URL` | Frontend origin for CORS + Socket.io |
-| `MONGODB_URI` | Optional; leave empty for demo |
 | `NODE_ENV` | `development` / `production` |
-| `CAREGUARD_LAB_DELAY_MINUTES` | Optional |
-| `CAREGUARD_TREATMENT_GRACE_MINUTES` | Optional |
-
-**Never commit `.env` files.** Templates only: `*.env.example`.
+| `MONGODB_URI` | Optional; empty = in-memory staff store |
+| `FIREBASE_PROJECT_ID` | Firebase Admin |
+| `FIREBASE_CLIENT_EMAIL` | Firebase Admin service account |
+| `FIREBASE_PRIVATE_KEY` | Firebase Admin (escaped `\n` newlines) |
+| `BOOTSTRAP_ADMIN_EMAIL` | Existing Admin email to map/create first Admin |
+| `BOOTSTRAP_ADMIN_PASSWORD` | Optional; only if you intentionally set/create Firebase password |
+| `BOOTSTRAP_ADMIN_NAME` | Optional display name |
+| `CAREGUARD_*` | Optional thresholds |
 
 ---
 
-## Production
+## Firebase setup
+
+1. Create a Firebase project; enable **Email/Password** (and Google if desired).  
+2. Register a **Web app**; copy config into `VITE_FIREBASE_*`.  
+3. Create a **service account**; put project id, client email, and private key in backend env.  
+4. Create the Admin user in Firebase Auth (or let bootstrap create it when password env is set).  
+5. Set `BOOTSTRAP_ADMIN_EMAIL` to that Admin email.  
+6. Create remaining staff only via **Admin → Staff Management**.
+
+---
+
+## MongoDB setup
+
+- **Optional for hackathon/local demo.** Leave `MONGODB_URI` empty to use the in-memory StaffUser store (cleared on backend restart).  
+- For durable staff across restarts/instances, set a MongoDB Atlas (or other) connection string on the backend only.
+
+---
+
+## Production / deployment overview
 
 ### Build
 
 ```bash
-# Frontend
-cd frontend
-npm install
-npm run build
-# Output: frontend/dist
-# Preview locally: npm run preview
-
-# Backend
-cd backend
-npm install
-npm run build
-# Output: backend/dist
-npm start   # node dist/server.js
+cd frontend && npm install && npm run build   # → frontend/dist
+cd backend  && npm install && npm run build   # → backend/dist
+cd backend  && npm start                     # node dist/server.js
 ```
 
-### Runtime relationship
+### Vercel Services (monorepo)
 
-1. Set `CLIENT_URL` on the backend to the deployed frontend origin.  
-2. Set `VITE_API_URL` at **frontend build time** to the deployed API URL.  
-3. Health check: `GET {API}/api/health` → `{ "status": "ok", "service": "Smart Care System" }`.  
-4. SPA hosts: use `frontend/public/_redirects` (Netlify) or `frontend/vercel.json` for client-side route fallback.
+Root `vercel.json` defines **frontend** (Vite) and **backend** (Express) services, with rewrites:
 
-MongoDB is **not required** for the NexaHack demo.
+- `/api/*` and `/socket.io/*` → backend  
+- everything else → frontend SPA  
+
+Configure env vars per service in the Vercel dashboard (Firebase Admin and `BOOTSTRAP_*` on backend only; `VITE_*` on frontend at **build** time).
+
+Set backend `CLIENT_URL` to the deployed frontend origin. For same-origin API via rewrites, frontend may use empty/`/` `VITE_API_URL` depending on your build settings.
+
+**Note:** Socket.io and in-memory CareGuard state assume a long-lived Node process; multi-instance serverless may need sticky sessions or externalized state for production realtime.
+
+Health: `GET {API}/api/health` → `{ "status": "ok", "service": "Smart Care System" }`.
 
 ---
 
-## Demo access
+## Demo access & rehearsal
 
-See **[DEMO_CREDENTIALS.md](./DEMO_CREDENTIALS.md)**.
+- Credentials / staff setup: [DEMO_CREDENTIALS.md](./DEMO_CREDENTIALS.md)  
+- 5-minute flow: [FINAL_DEMO_RUNBOOK.md](./FINAL_DEMO_RUNBOOK.md)  
+- Stage checklist: [FINAL_PRESENTATION_CHECKLIST.md](./FINAL_PRESENTATION_CHECKLIST.md)
 
-- Staff: Login → select role (no password in DEMO MODE)  
-- Family: Patient ID from Reception  
-- Canonical live patient: **Arjun Verma** (Fill button on Reception)  
-- Admin → **Reset Demo Data**
-
-## 5-minute demo
-
-See **[FINAL_DEMO_RUNBOOK.md](./FINAL_DEMO_RUNBOOK.md)** and **[FINAL_PRESENTATION_CHECKLIST.md](./FINAL_PRESENTATION_CHECKLIST.md)**.
+Canonical live demo patient: **Arjun Verma** (Reception Fill).  
+Admin → **Reset Demo Data** to restore clinical seed.
 
 Closing line:
 
@@ -153,8 +255,5 @@ Closing line:
 | Billing | `/billing` |
 | CareGuard | `/careguard` |
 | Admin | `/admin` |
+| Staff Management | `/admin/staff` |
 | Family | `/family/:patientId` |
-
-## Freeze note
-
-After the NexaHack final lock: **do not add features** unless a critical demo-breaking bug appears. Prefer reliability over new functionality.

@@ -9,30 +9,43 @@
 - [ ] Browser zoom at **100%**
 - [ ] Unnecessary browser extensions closed
 - [ ] Notifications / Do Not Disturb on
-- [ ] Internet verified **only if** deploying remotely (local demo works offline)
+- [ ] Internet verified if using Firebase Auth / remote deploy (local clinical demo can work offline)
 
 ### Application
 - [ ] Backend running (`cd backend && npm run dev`)
 - [ ] Frontend running (`cd frontend && npm run dev`)
 - [ ] `GET http://localhost:5000/api/health` returns `status: ok`
-- [ ] Environment variables verified (`.env` from `.env.example`)
-- [ ] Staff login (Admin) verified
+- [ ] Environment variables verified (`.env` from `.env.example` — no secrets in git)
+- [ ] Firebase web + Admin env configured
+- [ ] `BOOTSTRAP_ADMIN_EMAIL` set; Admin login verified
+- [ ] Demo staff created via Staff Management (if role switching live)
 - [ ] Family login path verified
 - [ ] **Reset Demo Data** tested once
 - [ ] Canonical patient flow rehearsed (**Arjun Verma**)
 - [ ] CareGuard lab-review signal tested end-to-end
 - [ ] Allergy CareGuard scenario (SCS-1005) optional backup ready
 
-### Browser tabs prepared
+### Deployment (if presenting from hosted URL)
+- [ ] Frontend build succeeds
+- [ ] Backend build/start succeeds
+- [ ] `CLIENT_URL` matches frontend origin
+- [ ] `VITE_API_URL` (or same-origin rewrites) points at live API
+- [ ] Firebase Auth authorized domains include production host
+- [ ] Health endpoint OK on production API
+- [ ] Admin login + one staff role smoke-tested on production
+
+### Browser / device
 - [ ] Tab 1: Landing `/`
 - [ ] Tab 2: Login ready
 - [ ] Prefer **one browser** — switch roles via Login (or two windows max)
 - [ ] DevTools **closed**
+- [ ] Correct device/projector output selected
 
 ### Backup
-- [ ] `Smart-Care-System-FINAL-BACKUP.zip` available offline
-- [ ] Local `frontend` + `backend` runnable without internet
+- [ ] Project ZIP / clone available offline
+- [ ] Local `frontend` + `backend` runnable without relying on a single remote host
 - [ ] Terminal open in project root (optional)
+- [ ] Known-good Admin credentials available privately (not in git)
 
 ---
 
