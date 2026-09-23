@@ -341,6 +341,7 @@ export const ROLE_NAV: Record<StaffRole, { label: string; path: string }[]> = {
   admin: [
     { label: "Dashboard", path: "/admin" },
     { label: "CareGuard", path: "/careguard" },
+    { label: "Connected Hospitals", path: "/careguard/hospitals" },
     { label: "Registration", path: "/reception" },
     { label: "Doctor", path: "/doctor" },
     { label: "Nurse", path: "/nurse" },
@@ -348,15 +349,18 @@ export const ROLE_NAV: Record<StaffRole, { label: string; path: string }[]> = {
     { label: "Lab", path: "/lab" },
     { label: "Billing", path: "/billing" },
     { label: "Staff Management", path: "/admin/staff" },
+    { label: "Hospital Network", path: "/admin/network" },
   ],
   reception: [{ label: "Registration", path: "/reception" }],
   doctor: [
     { label: "Patients", path: "/doctor" },
     { label: "CareGuard", path: "/careguard" },
+    { label: "Connected Hospitals", path: "/careguard/hospitals" },
   ],
   nurse: [
     { label: "Nursing Station", path: "/nurse" },
     { label: "CareGuard", path: "/careguard" },
+    { label: "Connected Hospitals", path: "/careguard/hospitals" },
   ],
   pharmacy: [
     { label: "Pharmacy", path: "/pharmacy" },

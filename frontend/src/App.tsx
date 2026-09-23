@@ -19,6 +19,9 @@ import BillingPage from "./pages/BillingPage";
 import FamilyDashboard from "./pages/FamilyDashboard";
 import LabPage from "./pages/LabPage";
 import CareGuardDashboard from "./pages/CareGuardDashboard";
+import ConnectedHospitalsPage from "./pages/ConnectedHospitalsPage";
+import IncomingRequestsPage from "./pages/IncomingRequestsPage";
+import AdminNetworkPage from "./pages/AdminNetworkPage";
 import NotFound from "./pages/NotFound";
 import FirebaseOnlyTestPage from "./pages/FirebaseOnlyTestPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
@@ -42,7 +45,10 @@ const App = () => (
                 <Route path="/reception" element={<ReceptionPage />} />
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/admin/staff" element={<StaffManagementPage />} />
+                <Route path="/admin/network" element={<AdminNetworkPage />} />
                 <Route path="/careguard" element={<CareGuardDashboard />} />
+                <Route path="/careguard/hospitals" element={<ConnectedHospitalsPage />} />
+                <Route path="/careguard/incoming" element={<IncomingRequestsPage />} />
                 <Route path="/doctor" element={<DoctorPanel />} />
                 <Route path="/pharmacy" element={<PharmacyPage />} />
                 <Route path="/nurse" element={<NursePage />} />

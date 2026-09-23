@@ -1,0 +1,337 @@
+import {
+  ASSISTANCE_TRANSITIONS,
+  normalizeAssistancePriority,
+  normalizeAssistanceStatus,
+  toPublicAssistanceRequest,
+  type AssistanceStatus,
+} from "../models/AssistanceRequest";
+import { normalizeHospitalStatus, toPublicHospital } from "../models/Hospital";
+import {
+  createAssistanceRequest,
+  findAssistanceById,
+  listAssistanceRequests,
+  listByRequestingHospital,
+  listByTargetHospital,
+  updateAssistanceStatus,
+} from "./assistanceRequestStore";
+import {
+  createHospital,
+  findHospitalByHospitalId,
+  findHospitalById,
+  getLocalHospital,
+  listHospitals,
+  updateHospital,
+} from "./hospitalStore";
+
+export class NetworkError extends Error {
+  status: number;
+  code: string;
+  constructor(message: string, status = 400, code = "NETWORK_ERROR") {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+function parseList(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map(String).map(s => s.trim()).filter(Boolean);
+  if (typeof raw === "string") {
+    return raw
+      .split(",")
+      .map(s => s.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+export async function getNetworkSummary() {
+  const local = await getLocalHospital();
+  const hospitals = await listHospitals();
+  const requests = await listAssistanceRequests();
+  const connected = hospitals.filter(h => !h.isLocal);
+
+  const activeStatuses: AssistanceStatus[] = ["PENDING", "ACCEPTED", "IN_PROGRESS"];
+  const active = requests.filter(r => activeStatuses.includes(r.status));
+  const pending = requests.filter(r => r.status === "PENDING");
+  const accepted = requests.filter(r => r.status === "ACCEPTED");
+  const inProgress = requests.filter(r => r.status === "IN_PROGRESS");
+  const resolved = requests.filter(r => r.status === "RESOLVED");
+
+  const localId = local?.hospitalId || "";
+  const outgoing = localId ? requests.filter(r => r.requestingHospitalId === localId) : [];
+  const incoming = localId ? requests.filter(r => r.targetHospitalId === localId) : [];
+
+  return {
+    localHospital: local ? toPublicHospital(local) : null,
+    connectedHospitalCount: connected.length,
+    hospitalsOnline: connected.filter(h => h.status === "ONLINE").length,
+    activeEmergencyRequests: active.length,
+    pendingAssistanceRequests: pending.length,
+    acceptedRequests: accepted.length,
+    inProgressRequests: inProgress.length,
+    resolvedRequests: resolved.length,
+    outgoingActive: outgoing.filter(r => activeStatuses.includes(r.status)).length,
+    incomingPending: incoming.filter(r => r.status === "PENDING").length,
+  };
+}
+
+export async function listConnectedHospitals(query: {
+  search?: string;
+  specialty?: string;
+  status?: string;
+  includeLocal?: boolean;
+}) {
+  let hospitals = await listHospitals();
+  if (!query.includeLocal) {
+    hospitals = hospitals.filter(h => !h.isLocal);
+  }
+
+  const search = (query.search || "").trim().toLowerCase();
+  if (search) {
+    hospitals = hospitals.filter(
+      h =>
+        h.hospitalName.toLowerCase().includes(search) ||
+        h.city.toLowerCase().includes(search) ||
+        h.state.toLowerCase().includes(search) ||
+        h.hospitalId.toLowerCase().includes(search) ||
+        h.departments.some(d => d.toLowerCase().includes(search))
+    );
+  }
+
+  const specialty = (query.specialty || "").trim().toLowerCase();
+  if (specialty) {
+    hospitals = hospitals.filter(h =>
+      h.departments.some(d => d.toLowerCase().includes(specialty))
+    );
+  }
+
+  if (query.status) {
+    const status = normalizeHospitalStatus(query.status);
+    if (!status) throw new NetworkError("Invalid hospital status filter", 400, "INVALID_STATUS");
+    hospitals = hospitals.filter(h => h.status === status);
+  }
+
+  return hospitals.map(toPublicHospital);
+}
+
+export async function getHospitalPublic(idOrHospitalId: string) {
+  const byId = await findHospitalById(idOrHospitalId);
+  const hospital = byId || (await findHospitalByHospitalId(idOrHospitalId));
+  if (!hospital) throw new NetworkError("Hospital not found", 404, "HOSPITAL_NOT_FOUND");
+  return toPublicHospital(hospital);
+}
+
+export async function registerConnectedHospital(input: Record<string, unknown>) {
+  const hospitalId = String(input.hospitalId || "").trim();
+  const hospitalName = String(input.hospitalName || "").trim();
+  if (!hospitalId || !hospitalName) {
+    throw new NetworkError("hospitalId and hospitalName are required", 400, "VALIDATION");
+  }
+
+  const local = await getLocalHospital();
+  if (local && local.hospitalId === hospitalId) {
+    throw new NetworkError("Cannot register the local hospital as a partner", 400, "INVALID_HOSPITAL");
+  }
+
+  const statusRaw = String(input.status || "ONLINE");
+  const status = normalizeHospitalStatus(statusRaw);
+  if (!status) throw new NetworkError("Invalid status. Use ONLINE, BUSY, or OFFLINE.", 400, "INVALID_STATUS");
+
+  try {
+    const hospital = await createHospital({
+      hospitalId,
+      hospitalName,
+      registrationId: String(input.registrationId || "").trim(),
+      address: String(input.address || "").trim(),
+      city: String(input.city || "").trim(),
+      state: String(input.state || "").trim(),
+      contactPhone: String(input.contactPhone || "").trim(),
+      contactEmail: String(input.contactEmail || "").trim(),
+      departments: parseList(input.departments),
+      facilities: parseList(input.facilities),
+      emergencySupport: input.emergencySupport !== false && input.emergencySupport !== "false",
+      status,
+      isLocal: false,
+    });
+    return toPublicHospital(hospital);
+  } catch (err: unknown) {
+    const statusCode = (err as { status?: number }).status || 500;
+    const code = (err as { code?: string }).code || "CREATE_FAILED";
+    throw new NetworkError(err instanceof Error ? err.message : "Failed to register hospital", statusCode, code);
+  }
+}
+
+export async function patchHospital(id: string, input: Record<string, unknown>) {
+  const existing = await findHospitalById(id);
+  if (!existing) throw new NetworkError("Hospital not found", 404, "HOSPITAL_NOT_FOUND");
+
+  const patch: Parameters<typeof updateHospital>[1] = {};
+  if (input.hospitalName !== undefined) patch.hospitalName = String(input.hospitalName).trim();
+  if (input.registrationId !== undefined) patch.registrationId = String(input.registrationId).trim();
+  if (input.address !== undefined) patch.address = String(input.address).trim();
+  if (input.city !== undefined) patch.city = String(input.city).trim();
+  if (input.state !== undefined) patch.state = String(input.state).trim();
+  if (input.contactPhone !== undefined) patch.contactPhone = String(input.contactPhone).trim();
+  if (input.contactEmail !== undefined) patch.contactEmail = String(input.contactEmail).trim().toLowerCase();
+  if (input.departments !== undefined) patch.departments = parseList(input.departments);
+  if (input.facilities !== undefined) patch.facilities = parseList(input.facilities);
+  if (input.emergencySupport !== undefined) {
+    patch.emergencySupport = Boolean(input.emergencySupport);
+  }
+  if (input.status !== undefined) {
+    const status = normalizeHospitalStatus(String(input.status));
+    if (!status) throw new NetworkError("Invalid status. Use ONLINE, BUSY, or OFFLINE.", 400, "INVALID_STATUS");
+    patch.status = status;
+  }
+
+  const updated = await updateHospital(id, patch);
+  if (!updated) throw new NetworkError("Hospital not found", 404, "HOSPITAL_NOT_FOUND");
+  return toPublicHospital(updated);
+}
+
+export async function createAssistance(input: Record<string, unknown>, staff: {
+  staffId: string;
+  fullName: string;
+}) {
+  const local = await getLocalHospital();
+  if (!local) {
+    throw new NetworkError(
+      "Local hospital is not configured. Set LOCAL_HOSPITAL_ID on the backend.",
+      503,
+      "LOCAL_HOSPITAL_MISSING"
+    );
+  }
+
+  const targetHospitalId = String(input.targetHospitalId || "").trim();
+  if (!targetHospitalId) {
+    throw new NetworkError("targetHospitalId is required", 400, "VALIDATION");
+  }
+  if (targetHospitalId === local.hospitalId) {
+    throw new NetworkError("Cannot send an assistance request to your own hospital", 400, "INVALID_TARGET");
+  }
+
+  const target = await findHospitalByHospitalId(targetHospitalId);
+  if (!target) throw new NetworkError("Target hospital not found", 404, "HOSPITAL_NOT_FOUND");
+  if (target.status === "OFFLINE") {
+    throw new NetworkError("Target hospital is currently OFFLINE", 409, "HOSPITAL_OFFLINE");
+  }
+
+  const priority = normalizeAssistancePriority(String(input.priority || "NORMAL"));
+  if (!priority) {
+    throw new NetworkError("Invalid priority. Use CRITICAL, HIGH, or NORMAL.", 400, "INVALID_PRIORITY");
+  }
+
+  const emergencyType = String(input.emergencyType || "").trim();
+  const requiredDepartment = String(input.requiredDepartment || "").trim();
+  if (!emergencyType || !requiredDepartment) {
+    throw new NetworkError("emergencyType and requiredDepartment are required", 400, "VALIDATION");
+  }
+
+  const request = await createAssistanceRequest({
+    requestingHospitalId: local.hospitalId,
+    targetHospitalId,
+    requestingStaffId: staff.staffId,
+    requestingStaffName: staff.fullName,
+    priority,
+    emergencyType,
+    requiredDepartment,
+    requiredFacilities: parseList(input.requiredFacilities),
+    shortDescription: String(input.shortDescription || ""),
+    patientReference: String(input.patientReference || ""),
+  });
+
+  return toPublicAssistanceRequest(request);
+}
+
+export async function listAssistance(query: {
+  scope?: string;
+  status?: string;
+  isAdmin?: boolean;
+}) {
+  const local = await getLocalHospital();
+  const localId = local?.hospitalId || "";
+  const scope = (query.scope || "all").toLowerCase();
+
+  let rows;
+  if (scope === "incoming") {
+    if (!localId) return [];
+    rows = await listByTargetHospital(localId);
+  } else if (scope === "outgoing") {
+    if (!localId) return [];
+    rows = await listByRequestingHospital(localId);
+  } else if (scope === "network" && query.isAdmin) {
+    rows = await listAssistanceRequests();
+  } else {
+    // Default for staff: local outgoing + incoming
+    if (!localId) return [];
+    const [out, inn] = await Promise.all([
+      listByRequestingHospital(localId),
+      listByTargetHospital(localId),
+    ]);
+    const map = new Map(out.concat(inn).map(r => [r.id, r]));
+    rows = [...map.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  if (query.status) {
+    const status = normalizeAssistanceStatus(query.status);
+    if (!status) throw new NetworkError("Invalid request status filter", 400, "INVALID_STATUS");
+    rows = rows.filter(r => r.status === status);
+  }
+
+  return rows.map(toPublicAssistanceRequest);
+}
+
+export async function getAssistancePublic(id: string) {
+  const row = await findAssistanceById(id);
+  if (!row) throw new NetworkError("Assistance request not found", 404, "REQUEST_NOT_FOUND");
+  return toPublicAssistanceRequest(row);
+}
+
+export async function changeAssistanceStatus(
+  id: string,
+  nextStatusRaw: string,
+  actor: { role: string; staffId: string },
+  opts?: { adminNetwork?: boolean }
+) {
+  const row = await findAssistanceById(id);
+  if (!row) throw new NetworkError("Assistance request not found", 404, "REQUEST_NOT_FOUND");
+
+  const nextStatus = normalizeAssistanceStatus(nextStatusRaw);
+  if (!nextStatus) {
+    throw new NetworkError("Invalid status", 400, "INVALID_STATUS");
+  }
+
+  const allowed = ASSISTANCE_TRANSITIONS[row.status] || [];
+  if (!allowed.includes(nextStatus)) {
+    throw new NetworkError(
+      `Cannot change status from ${row.status} to ${nextStatus}`,
+      409,
+      "INVALID_TRANSITION"
+    );
+  }
+
+  const local = await getLocalHospital();
+  const localId = local?.hospitalId || "";
+  const isAdmin = actor.role === "admin";
+  const isReceiver = localId && row.targetHospitalId === localId;
+  const isRequester = localId && row.requestingHospitalId === localId;
+
+  // Cancel: requester or admin
+  if (nextStatus === "CANCELLED") {
+    if (!isAdmin && !isRequester) {
+      throw new NetworkError("Only the requesting hospital can cancel this request", 403, "FORBIDDEN");
+    }
+  } else if (nextStatus === "REJECTED" || nextStatus === "ACCEPTED" || nextStatus === "IN_PROGRESS" || nextStatus === "RESOLVED") {
+    // Receiving hospital (or admin network ops)
+    if (!isAdmin && !isReceiver && !opts?.adminNetwork) {
+      throw new NetworkError("Only the receiving hospital can update this status", 403, "FORBIDDEN");
+    }
+    if (!isAdmin && !["doctor", "nurse", "admin"].includes(actor.role)) {
+      throw new NetworkError("Your role cannot modify assistance requests", 403, "FORBIDDEN");
+    }
+  }
+
+  const updated = await updateAssistanceStatus(id, nextStatus);
+  if (!updated) throw new NetworkError("Assistance request not found", 404, "REQUEST_NOT_FOUND");
+  return toPublicAssistanceRequest(updated);
+}

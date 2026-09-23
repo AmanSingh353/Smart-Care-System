@@ -13,6 +13,7 @@ import {
   Bell,
   ChevronDown,
   Shield,
+  Building2,
 } from "lucide-react";
 import hospitalLogo from "@/assets/hospital-logo.png";
 import { useAuth, ROLE_NAV, ROLE_LABELS, StaffRole } from "@/contexts/AuthContext";
@@ -36,6 +37,8 @@ const iconMap: Record<string, typeof LayoutDashboard> = {
   Lab: FlaskConical,
   CareGuard: Shield,
   "Staff Management": Users,
+  "Connected Hospitals": Building2,
+  "Hospital Network": Building2,
 };
 
 const GROUP_LABELS: Record<StaffRole, { title: string; paths?: string[] }[]> = {

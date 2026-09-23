@@ -9,6 +9,8 @@ import pharmacyRoutes from "./pharmacy.routes";
 import billingRoutes from "./billing.routes";
 import familyRoutes from "./family.routes";
 import adminRoutes from "./admin.routes";
+import hospitalsRoutes from "./hospitals.routes";
+import assistanceRoutes from "./assistance.routes";
 import careGuardRoutes from "../careguard/routes/careguard.routes";
 import { ensureCareGuardWired } from "../careguard/services/careGuardService";
 
@@ -26,6 +28,8 @@ router.use("/pharmacy", pharmacyRoutes);
 router.use("/billing", billingRoutes);
 router.use("/family", familyRoutes);
 router.use("/admin", adminRoutes);
+router.use("/hospitals", hospitalsRoutes);
+router.use("/assistance-requests", assistanceRoutes);
 router.use("/careguard", careGuardRoutes);
 
 export default router;
