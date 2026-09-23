@@ -1,6 +1,7 @@
 /**
- * MongoDB connection.
- * Safe when MONGODB_URI is empty — app runs with in-memory staff store.
+ * Database / staff-store bootstrap.
+ * MongoDB when MONGODB_URI is set; otherwise durable local file staff store.
+ * ensureBootstrapAdmin is idempotent and never wipes existing StaffUser records.
  */
 import mongoose from "mongoose";
 import { env } from "./env";
@@ -12,13 +13,13 @@ export async function connectDatabase(): Promise<void> {
   initFirebaseAdmin();
 
   if (!env.mongoUri) {
-    console.log("[db] MONGODB_URI not set — running without MongoDB (in-memory staff + stub mode)");
+    console.log("[db] MONGODB_URI not set — StaffUser persistence uses local file store");
   } else {
     try {
       await mongoose.connect(env.mongoUri);
       console.log("[db] MongoDB connected");
     } catch (err) {
-      console.error("[db] MongoDB connection failed — continuing with in-memory fallback", err);
+      console.error("[db] MongoDB connection failed — falling back to file staff store", err);
     }
   }
 

@@ -52,6 +52,16 @@ export const authService = {
   getStaff: (idToken: string, id: string) =>
     api.get<{ user: StaffProfile }>(`/api/auth/staff/${id}`, { Authorization: `Bearer ${idToken}` }),
 
+  lookupFirebaseAccount: (idToken: string, email: string) =>
+    api.get<{
+      email: string;
+      existsInFirebase: boolean;
+      firebaseUid: string | null;
+      existsInStaffStore: boolean;
+    }>(`/api/auth/firebase-account?email=${encodeURIComponent(email)}`, {
+      Authorization: `Bearer ${idToken}`,
+    }),
+
   createStaff: (
     idToken: string,
     body: {
@@ -61,12 +71,14 @@ export const authService = {
       department: string;
       staffId: string;
       status?: StaffAccountStatus;
-      temporaryPassword: string;
+      temporaryPassword?: string;
     }
   ) =>
     api.post<{
       user: StaffProfile;
       message: string;
+      linkedExistingFirebase: boolean;
+      createdFirebase: boolean;
     }>("/api/auth/staff", body, { Authorization: `Bearer ${idToken}` }),
 
   updateStaff: (

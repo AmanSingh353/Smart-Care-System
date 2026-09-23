@@ -203,6 +203,51 @@ async function recoverBootstrapAdminSession(uid: string, email: string): Promise
   });
 }
 
+export async function lookupFirebaseAccount(emailRaw: string): Promise<{
+  email: string;
+  existsInFirebase: boolean;
+  firebaseUid: string | null;
+  existsInStaffStore: boolean;
+}> {
+  const email = emailRaw.trim().toLowerCase();
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  if (!emailOk) throw new AuthError("Enter a valid email address", 400, "INVALID_EMAIL");
+
+  const auth = getFirebaseAuth();
+  if (!auth) {
+    throw new AuthError(
+      "Firebase Admin is not configured. Cannot look up authentication identities.",
+      503,
+      "FIREBASE_NOT_CONFIGURED"
+    );
+  }
+
+  let existsInFirebase = false;
+  let firebaseUid: string | null = null;
+  try {
+    const fb = await auth.getUserByEmail(email);
+    existsInFirebase = true;
+    firebaseUid = fb.uid;
+  } catch (err: unknown) {
+    const code = err && typeof err === "object" && "code" in err ? String((err as { code: string }).code) : "";
+    if (code !== "auth/user-not-found") {
+      throw new AuthError(
+        err instanceof Error ? err.message : "Firebase lookup failed",
+        502,
+        "FIREBASE_LOOKUP_FAILED"
+      );
+    }
+  }
+
+  const existingStaff = await findByEmail(email);
+  return {
+    email,
+    existsInFirebase,
+    firebaseUid,
+    existsInStaffStore: Boolean(existingStaff),
+  };
+}
+
 export async function createStaffAccount(input: {
   fullName: string;
   email: string;
@@ -210,8 +255,8 @@ export async function createStaffAccount(input: {
   department: string;
   staffId: string;
   status?: string;
-  temporaryPassword: string;
-}): Promise<{ user: StaffUser }> {
+  temporaryPassword?: string;
+}): Promise<{ user: StaffUser; linkedExistingFirebase: boolean; createdFirebase: boolean }> {
   const role = normalizeStaffRole(input.role);
   if (!role || !CREATABLE_STAFF_ROLES.includes(role)) {
     throw new AuthError("Invalid staff role", 400, "INVALID_ROLE");
@@ -222,22 +267,15 @@ export async function createStaffAccount(input: {
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email.trim());
   if (!emailOk) throw new AuthError("Enter a valid email address", 400, "INVALID_EMAIL");
 
-  const temporaryPassword = input.temporaryPassword?.trim() || "";
-  if (temporaryPassword.length < 8) {
-    throw new AuthError("Temporary password must be at least 8 characters.", 400, "INVALID_PASSWORD");
-  }
-
   const status = input.status ? normalizeStaffStatus(input.status) : "ACTIVE";
   if (!status || status === "DISABLED") {
     throw new AuthError("Invalid account status. Use ACTIVE, INVITED, or SUSPENDED.", 400, "INVALID_STATUS");
   }
 
   const email = input.email.trim().toLowerCase();
-
-  const existingStaff = await findByEmail(email);
-  if (existingStaff) {
-    throw new AuthError("A staff user with this email already exists", 409, "DUPLICATE_EMAIL");
-  }
+  const fullName = input.fullName.trim();
+  const department = (input.department || "").trim();
+  const staffId = input.staffId.trim();
 
   const auth = getFirebaseAuth();
   if (!auth) {
@@ -248,55 +286,121 @@ export async function createStaffAccount(input: {
     );
   }
 
-  let firebaseUid: string;
+  // 1) Prefer existing Firebase Auth user by normalized email — never create a duplicate identity
+  let firebaseUid: string | null = null;
+  let linkedExistingFirebase = false;
+  let createdFirebase = false;
   try {
-    const fb = await auth.createUser({
-      email,
-      password: temporaryPassword,
-      displayName: input.fullName.trim(),
-      emailVerified: false,
-      disabled: status === "SUSPENDED",
-    });
-    firebaseUid = fb.uid;
+    const existingFb = await auth.getUserByEmail(email);
+    firebaseUid = existingFb.uid;
+    linkedExistingFirebase = true;
   } catch (err: unknown) {
     const code = err && typeof err === "object" && "code" in err ? String((err as { code: string }).code) : "";
-    if (code === "auth/email-already-exists") {
+    if (code !== "auth/user-not-found") {
       throw new AuthError(
-        "A Firebase account already exists for this email.",
-        409,
-        "FIREBASE_EMAIL_EXISTS"
+        err instanceof Error ? err.message : "Firebase lookup failed",
+        502,
+        "FIREBASE_LOOKUP_FAILED"
       );
     }
-    if (code === "auth/invalid-password" || code === "auth/weak-password") {
+  }
+
+  // 2) If no Firebase user, create one (temporary password required)
+  if (!firebaseUid) {
+    const temporaryPassword = input.temporaryPassword?.trim() || "";
+    if (temporaryPassword.length < 8) {
       throw new AuthError(
-        "Temporary password does not meet Firebase password requirements.",
+        "Temporary password must be at least 8 characters when creating a new Firebase account.",
         400,
         "INVALID_PASSWORD"
       );
     }
-    throw new AuthError(
-      err instanceof Error ? err.message : "Failed to create Firebase user",
-      502,
-      "FIREBASE_CREATE_FAILED"
-    );
+    try {
+      const fb = await auth.createUser({
+        email,
+        password: temporaryPassword,
+        displayName: fullName,
+        emailVerified: false,
+        disabled: status === "SUSPENDED",
+      });
+      firebaseUid = fb.uid;
+      createdFirebase = true;
+    } catch (err: unknown) {
+      const code = err && typeof err === "object" && "code" in err ? String((err as { code: string }).code) : "";
+      if (code === "auth/email-already-exists") {
+        // Race: another process created it — link instead of failing
+        const existingFb = await auth.getUserByEmail(email);
+        firebaseUid = existingFb.uid;
+        linkedExistingFirebase = true;
+      } else if (code === "auth/invalid-password" || code === "auth/weak-password") {
+        throw new AuthError(
+          "Temporary password does not meet Firebase password requirements.",
+          400,
+          "INVALID_PASSWORD"
+        );
+      } else {
+        throw new AuthError(
+          err instanceof Error ? err.message : "Failed to create Firebase user",
+          502,
+          "FIREBASE_CREATE_FAILED"
+        );
+      }
+    }
   }
 
+  // 3) Duplicate StaffUser protection by email or Firebase UID — update/link, never duplicate
+  const byEmail = await findByEmail(email);
+  const byUid = await findByFirebaseUid(firebaseUid);
+  const existingStaff = byEmail || byUid;
+
+  if (existingStaff) {
+    if (byEmail && byUid && byEmail.id !== byUid.id) {
+      throw new AuthError(
+        "This email and Firebase identity are linked to different staff records.",
+        409,
+        "STAFF_IDENTITY_CONFLICT"
+      );
+    }
+    if (existingStaff.email !== email && byUid && !byEmail) {
+      throw new AuthError(
+        "This Firebase account is already linked to a different staff email.",
+        409,
+        "STAFF_IDENTITY_CONFLICT"
+      );
+    }
+
+    const updated = await updateStaffUser(existingStaff.id, {
+      fullName,
+      role,
+      department,
+      staffId,
+      status: status === "INVITED" ? "INVITED" : status,
+      firebaseUid,
+      // Existing Firebase password is preserved — do not force password change on link
+      mustChangePassword: linkedExistingFirebase ? false : existingStaff.mustChangePassword,
+    });
+    if (!updated) throw new AuthError("Failed to update staff user", 500, "UPDATE_FAILED");
+    return { user: updated, linkedExistingFirebase, createdFirebase: false };
+  }
+
+  // 4) Create new StaffUser linked to Firebase UID
   try {
     const user = await createStaffUser({
       email,
-      fullName: input.fullName,
+      fullName,
       role,
-      department: input.department || "",
-      staffId: input.staffId,
+      department,
+      staffId,
       status: status === "INVITED" ? "INVITED" : status,
       firebaseUid,
-      mustChangePassword: true,
+      mustChangePassword: createdFirebase,
     });
-    // Password is never returned or stored — Admin UI keeps the value they typed in memory only.
-    return { user };
+    return { user, linkedExistingFirebase, createdFirebase };
   } catch (err: unknown) {
-    // Roll back orphaned Firebase Auth user if StaffUser create fails
-    await auth.deleteUser(firebaseUid).catch(() => undefined);
+    // Only roll back a Firebase user we just created in this request
+    if (createdFirebase && firebaseUid) {
+      await auth.deleteUser(firebaseUid).catch(() => undefined);
+    }
     const statusCode = (err as { status?: number }).status || 500;
     const code = (err as { code?: string }).code || "CREATE_FAILED";
     throw new AuthError(err instanceof Error ? err.message : "Failed to create staff user", statusCode, code);

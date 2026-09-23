@@ -10,6 +10,12 @@ router.post("/session", staffAuthController.session);
 router.get("/me", requireAuth, requireStaff, staffAuthController.me);
 router.post("/complete-password-change", requireAuth, requireStaff, staffAuthController.completePasswordChange);
 router.get("/staff", requireAuth, requireStaff, staffAuthController.listStaff);
+router.get(
+  "/firebase-account",
+  requireAuth,
+  requireStaff,
+  staffAuthController.lookupFirebaseAccount
+);
 router.get("/staff/:id", requireAuth, requireStaff, staffAuthController.getStaff);
 router.post("/staff", requireAuth, requireStaff, staffAuthController.createStaff);
 router.patch("/staff/:id", requireAuth, requireStaff, staffAuthController.updateStaff);

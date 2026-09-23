@@ -38,6 +38,9 @@ lerna-debug.log*
 *.local
 coverage/
 
+# Local StaffUser file store (when MONGODB_URI is empty)
+backend/data/
+
 # Backups / archives (keep outside git)
 *.zip
 backups/

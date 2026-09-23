@@ -79,6 +79,13 @@ export function StaffManagement() {
   const [form, setForm] = useState(emptyForm);
   const [addOpen, setAddOpen] = useState(false);
   const [showTempPassword, setShowTempPassword] = useState(false);
+  const [firebaseLookup, setFirebaseLookup] = useState<{
+    email: string;
+    existsInFirebase: boolean;
+    firebaseUid: string | null;
+    existsInStaffStore: boolean;
+  } | null>(null);
+  const [lookupBusy, setLookupBusy] = useState(false);
   const [createdCredentials, setCreatedCredentials] = useState<{
     email: string;
     temporaryPassword: string;
@@ -128,12 +135,12 @@ export function StaffManagement() {
     });
   }, [staff, search, roleFilter, statusFilter]);
 
-  const validateForm = (data: typeof emptyForm) => {
+  const validateForm = (data: typeof emptyForm, linkingExisting: boolean) => {
     if (!data.fullName.trim()) return "Full name is required.";
     if (!data.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email.trim())) {
       return "Enter a valid email address.";
     }
-    if (!data.temporaryPassword || data.temporaryPassword.length < 8) {
+    if (!linkingExisting && (!data.temporaryPassword || data.temporaryPassword.length < 8)) {
       return "Temporary password must be at least 8 characters.";
     }
     if (!data.staffId.trim()) return "Staff ID is required.";
@@ -141,38 +148,74 @@ export function StaffManagement() {
     return null;
   };
 
+  const lookupEmail = async (emailRaw: string) => {
+    const email = emailRaw.trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setFirebaseLookup(null);
+      return;
+    }
+    setLookupBusy(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) return;
+      const result = await authService.lookupFirebaseAccount(token, email);
+      setFirebaseLookup(result);
+    } catch (err) {
+      setFirebaseLookup(null);
+      setError(formatAuthError(err));
+    } finally {
+      setLookupBusy(false);
+    }
+  };
+
   const onCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setMessage(null);
-    const v = validateForm(form);
-    if (v) {
-      setError(v);
-      return;
-    }
-    const passwordForShare = form.temporaryPassword;
     const emailForShare = form.email.trim().toLowerCase();
     setBusy(true);
     try {
       const token = await getAccessToken();
       if (!token) throw new Error("Not authenticated");
-      await authService.createStaff(token, {
+
+      let linkingExisting = Boolean(
+        firebaseLookup?.existsInFirebase && firebaseLookup.email === emailForShare
+      );
+      if (!linkingExisting || firebaseLookup?.email !== emailForShare) {
+        const lookup = await authService.lookupFirebaseAccount(token, emailForShare);
+        setFirebaseLookup(lookup);
+        linkingExisting = lookup.existsInFirebase;
+      }
+
+      const v = validateForm(form, linkingExisting);
+      if (v) {
+        setError(v);
+        setBusy(false);
+        return;
+      }
+
+      const passwordForShare = form.temporaryPassword;
+      const result = await authService.createStaff(token, {
         fullName: form.fullName.trim(),
         email: emailForShare,
         role: form.role,
         department: form.department.trim(),
         staffId: form.staffId.trim(),
         status: form.status,
-        temporaryPassword: passwordForShare,
+        ...(linkingExisting ? {} : { temporaryPassword: passwordForShare }),
       });
       setForm(emptyForm);
       setShowTempPassword(false);
+      setFirebaseLookup(null);
       setAddOpen(false);
       setRevealCreatedPassword(false);
       setCopied(false);
-      // Keep password only in React state for one-time Admin share — never localStorage / never from API
-      setCreatedCredentials({ email: emailForShare, temporaryPassword: passwordForShare });
-      setMessage("Staff account created successfully.");
+      if (result.createdFirebase && passwordForShare) {
+        setCreatedCredentials({ email: emailForShare, temporaryPassword: passwordForShare });
+      } else {
+        setCreatedCredentials(null);
+      }
+      setMessage(result.message);
       await refresh();
     } catch (err) {
       setError(formatAuthError(err));
@@ -462,6 +505,7 @@ export function StaffManagement() {
           setAddOpen(open);
           if (!open) {
             setShowTempPassword(false);
+            setFirebaseLookup(null);
             setForm(emptyForm);
           }
         }}
@@ -470,8 +514,8 @@ export function StaffManagement() {
           <DialogHeader>
             <DialogTitle>Add Staff</DialogTitle>
             <DialogDescription>
-              Creates a Firebase Auth identity and Smart Care System staff record. Passwords are never
-              stored in MongoDB.
+              Links an existing Firebase account by email, or creates a new Firebase identity when
+              needed. Passwords are never stored in Smart Care System.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={onCreate} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -490,37 +534,57 @@ export function StaffManagement() {
                 type="email"
                 className="mt-1 rounded-xl"
                 value={form.email}
-                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                onChange={e => {
+                  setForm(f => ({ ...f, email: e.target.value }));
+                  setFirebaseLookup(null);
+                }}
+                onBlur={() => lookupEmail(form.email)}
                 required
               />
+              {lookupBusy && (
+                <p className="text-xs text-muted-foreground mt-1.5">Checking Firebase…</p>
+              )}
+              {!lookupBusy && firebaseLookup?.existsInFirebase && (
+                <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1.5">
+                  Existing Firebase account found. This staff member will be linked to the existing
+                  account. The existing password will not be changed.
+                </p>
+              )}
+              {!lookupBusy && firebaseLookup && !firebaseLookup.existsInFirebase && (
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  No existing Firebase account found. A new account will be created.
+                </p>
+              )}
             </div>
-            <div className="sm:col-span-2">
-              <Label htmlFor="temp-password">Temporary Password</Label>
-              <div className="relative mt-1">
-                <Input
-                  id="temp-password"
-                  type={showTempPassword ? "text" : "password"}
-                  className="rounded-xl pr-10"
-                  value={form.temporaryPassword}
-                  onChange={e => setForm(f => ({ ...f, temporaryPassword: e.target.value }))}
-                  required
-                  minLength={8}
-                  autoComplete="new-password"
-                />
-                <button
-                  type="button"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground"
-                  onClick={() => setShowTempPassword(v => !v)}
-                  aria-label={showTempPassword ? "Hide password" : "Show password"}
-                >
-                  {showTempPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
+            {(!firebaseLookup || !firebaseLookup.existsInFirebase) && (
+              <div className="sm:col-span-2">
+                <Label htmlFor="temp-password">Temporary Password</Label>
+                <div className="relative mt-1">
+                  <Input
+                    id="temp-password"
+                    type={showTempPassword ? "text" : "password"}
+                    className="rounded-xl pr-10"
+                    value={form.temporaryPassword}
+                    onChange={e => setForm(f => ({ ...f, temporaryPassword: e.target.value }))}
+                    required={!firebaseLookup?.existsInFirebase}
+                    minLength={8}
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground"
+                    onClick={() => setShowTempPassword(v => !v)}
+                    aria-label={showTempPassword ? "Hide password" : "Show password"}
+                  >
+                    {showTempPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  Required only when creating a new Firebase account. Not shown or stored for
+                  existing accounts.
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground mt-1.5">
-                Temporary password is used for the staff member&apos;s first login. The password is not
-                stored in Smart Care System.
-              </p>
-            </div>
+            )}
             <div>
               <Label>Role</Label>
               <select
@@ -557,8 +621,14 @@ export function StaffManagement() {
               <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={busy}>
-                {busy ? "Creating…" : "Create staff"}
+              <Button type="submit" disabled={busy || lookupBusy}>
+                {busy
+                  ? firebaseLookup?.existsInFirebase
+                    ? "Linking…"
+                    : "Creating…"
+                  : firebaseLookup?.existsInFirebase
+                    ? "Link staff"
+                    : "Create staff"}
               </Button>
             </DialogFooter>
           </form>

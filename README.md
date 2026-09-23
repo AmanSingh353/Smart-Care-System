@@ -156,7 +156,7 @@ Do **not** put Admin SDK keys, MongoDB URIs, or bootstrap passwords in `VITE_*`.
 | `PORT` / `HOST` | Listen address (default `5000` / `0.0.0.0`) |
 | `CLIENT_URL` | Frontend origin for CORS + Socket.io |
 | `NODE_ENV` | `development` / `production` |
-| `MONGODB_URI` | Optional; empty = in-memory staff store |
+| `MONGODB_URI` | Optional; empty = durable local file store (`backend/data/staff-users.json`) |
 | `FIREBASE_PROJECT_ID` | Firebase Admin |
 | `FIREBASE_CLIENT_EMAIL` | Firebase Admin service account |
 | `FIREBASE_PRIVATE_KEY` | Firebase Admin (escaped `\n` newlines) |

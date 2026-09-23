@@ -6,6 +6,7 @@ import {
   completePasswordChange,
   createStaffAccount,
   listStaff,
+  lookupFirebaseAccount,
   resolveStaffSession,
   toPublicStaffUser,
 } from "../services/staffAuthService";
@@ -95,6 +96,17 @@ export const staffAuthController = {
     }
   },
 
+  async lookupFirebaseAccount(req: Request, res: Response) {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const email = String(req.query.email || "");
+      const result = await lookupFirebaseAccount(email);
+      return res.json(result);
+    } catch (err) {
+      return handleAuthError(res, err);
+    }
+  },
+
   async createStaff(req: Request, res: Response) {
     try {
       if (!requireAdmin(req, res)) return;
@@ -108,9 +120,14 @@ export const staffAuthController = {
         status,
         temporaryPassword,
       });
+      const message = result.linkedExistingFirebase
+        ? "Staff linked to existing Firebase account."
+        : "Staff account created successfully.";
       return res.status(201).json({
         user: toPublicStaffUser(result.user),
-        message: "Staff account created successfully.",
+        linkedExistingFirebase: result.linkedExistingFirebase,
+        createdFirebase: result.createdFirebase,
+        message,
       });
     } catch (err) {
       return handleAuthError(res, err);

@@ -1,8 +1,12 @@
 /**
  * Staff user persistence.
- * Uses MongoDB when MONGODB_URI is set; otherwise an in-memory store (hackathon / local).
+ * - MongoDB when MONGODB_URI is set
+ * - Otherwise a durable local JSON file store (survives backend restarts)
  * Never stores passwords — identity is Firebase Authentication only.
+ * Never auto-seeds demo staff and never rebuilds StaffUser rows from Firebase Auth.
  */
+import fs from "fs/promises";
+import path from "path";
 import mongoose, { Schema, type Model } from "mongoose";
 import { env } from "../config/env";
 import type { StaffAccountStatus, StaffRole, StaffUser } from "../models/User";
@@ -11,6 +15,16 @@ import { STAFF_ROLES, STAFF_STATUSES } from "../models/User";
 const memory = new Map<string, StaffUser>();
 let seq = 1;
 let mongoReady = false;
+let fileStoreReady = false;
+
+const DATA_DIR = path.resolve(process.cwd(), "data");
+const STAFF_FILE = path.join(DATA_DIR, "staff-users.json");
+
+interface StaffFilePayload {
+  version: 1;
+  seq: number;
+  users: StaffUser[];
+}
 
 interface StaffUserMongo {
   firebaseUid: string | null;
@@ -62,9 +76,65 @@ function fromMongo(
   };
 }
 
+async function loadFileStore(): Promise<void> {
+  memory.clear();
+  seq = 1;
+  try {
+    const raw = await fs.readFile(STAFF_FILE, "utf8");
+    const parsed = JSON.parse(raw) as StaffFilePayload;
+    const users = Array.isArray(parsed.users) ? parsed.users : [];
+    let maxSeq = 0;
+    for (const u of users) {
+      if (!u?.id || !u?.email) continue;
+      const normalized: StaffUser = {
+        id: String(u.id),
+        firebaseUid: u.firebaseUid ?? null,
+        email: String(u.email).toLowerCase(),
+        fullName: String(u.fullName || ""),
+        role: u.role,
+        department: String(u.department || ""),
+        staffId: String(u.staffId || ""),
+        status: u.status || "ACTIVE",
+        mustChangePassword: Boolean(u.mustChangePassword),
+        createdAt: u.createdAt || new Date().toISOString(),
+        updatedAt: u.updatedAt || new Date().toISOString(),
+        lastLoginAt: u.lastLoginAt ?? null,
+      };
+      memory.set(normalized.id, normalized);
+      const m = /^SU-(\d+)$/.exec(normalized.id);
+      if (m) maxSeq = Math.max(maxSeq, Number(m[1]));
+    }
+    seq = Math.max(Number(parsed.seq) || 1, maxSeq + 1);
+    fileStoreReady = true;
+    console.log(`[users] File staff store loaded (${memory.size} record(s)) — ${STAFF_FILE}`);
+  } catch (err: unknown) {
+    const code = err && typeof err === "object" && "code" in err ? String((err as { code: string }).code) : "";
+    if (code === "ENOENT") {
+      fileStoreReady = true;
+      console.log(`[users] File staff store ready (empty) — ${STAFF_FILE}`);
+      return;
+    }
+    console.error("[users] Failed to load staff file store — starting empty", err);
+    fileStoreReady = true;
+  }
+}
+
+async function persistFileStore(): Promise<void> {
+  if (mongoReady || !fileStoreReady) return;
+  await fs.mkdir(DATA_DIR, { recursive: true });
+  const payload: StaffFilePayload = {
+    version: 1,
+    seq,
+    users: [...memory.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+  };
+  const tmp = `${STAFF_FILE}.tmp`;
+  await fs.writeFile(tmp, JSON.stringify(payload, null, 2), "utf8");
+  await fs.rename(tmp, STAFF_FILE);
+}
+
 export async function initUserStore(): Promise<void> {
   if (!env.mongoUri) {
-    console.log("[users] Using in-memory staff store (MONGODB_URI not set) — no auto-seeded staff");
+    await loadFileStore();
     return;
   }
   try {
@@ -73,10 +143,12 @@ export async function initUserStore(): Promise<void> {
     }
     StaffModel = mongoose.models.StaffUser || mongoose.model<StaffUserMongo>("StaffUser", StaffUserSchema);
     mongoReady = true;
+    fileStoreReady = false;
     console.log("[users] MongoDB staff store ready — no auto-seeded staff");
   } catch (err) {
-    console.error("[users] Mongo connect failed — using empty in-memory store", err);
+    console.error("[users] Mongo connect failed — falling back to file staff store", err);
     mongoReady = false;
+    await loadFileStore();
   }
 }
 
@@ -197,6 +269,7 @@ export async function createStaffUser(input: {
     lastLoginAt: null,
   };
   memory.set(id, user);
+  await persistFileStore();
   return user;
 }
 
@@ -230,6 +303,7 @@ export async function updateStaffUser(
   if (!cur) return null;
   const next = { ...cur, ...patch, updatedAt: new Date().toISOString() };
   memory.set(id, next);
+  await persistFileStore();
   return next;
 }
 
@@ -251,5 +325,6 @@ export async function deleteStaffUser(id: string): Promise<StaffUser | null> {
     return existing;
   }
   memory.delete(id);
+  await persistFileStore();
   return existing;
 }
