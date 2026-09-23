@@ -377,64 +377,78 @@ export function StaffManagement() {
       {message && <p className="text-sm text-foreground bg-muted/50 rounded-xl px-3 py-2 break-all">{message}</p>}
 
       {/* Desktop / tablet table */}
-      <Card className="rounded-2xl shadow-card hidden md:block overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm table-fixed min-w-[960px]">
+      <Card className="rounded-2xl shadow-card hidden md:block w-full overflow-hidden">
+        <div className="w-full overflow-x-auto">
+          <table className="w-full min-w-[1120px] table-fixed border-collapse text-sm">
             <colgroup>
-              <col className="w-[14%]" />
-              <col className="w-[18%]" />
-              <col className="w-[9%]" />
-              <col className="w-[12%]" />
-              <col className="w-[9%]" />
-              <col className="w-[9%]" />
-              <col className="w-[11%]" />
-              <col className="w-[11%]" />
-              <col className="w-[7%]" />
+              <col style={{ width: "15%" }} />
+              <col style={{ width: "16%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "11%" }} />
+              <col style={{ width: "11%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "12%" }} />
             </colgroup>
             <thead>
-              <tr className="border-b border-border text-left text-muted-foreground bg-muted/30">
-                <th className="px-4 py-3 font-medium">Name</th>
+              <tr className="border-b border-border bg-muted/30 text-left text-muted-foreground">
+                <th className="px-3 py-3 font-medium">Name</th>
                 <th className="px-3 py-3 font-medium">Email</th>
                 <th className="px-3 py-3 font-medium">Role</th>
                 <th className="px-3 py-3 font-medium">Department</th>
                 <th className="px-3 py-3 font-medium">Staff ID</th>
-                <th className="px-3 py-3 font-medium">Status</th>
+                <th className="px-3 py-3 text-center font-medium">Status</th>
                 <th className="px-3 py-3 font-medium">Created</th>
                 <th className="px-3 py-3 font-medium">Last Login</th>
-                <th className="px-3 py-3 font-medium text-right whitespace-nowrap">Actions</th>
+                <th className="px-3 py-3 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(u => (
                 <tr key={u.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20">
-                  <td className="px-4 py-3 font-medium text-foreground truncate" title={u.fullName}>
-                    {u.fullName}
+                  <td className="max-w-0 overflow-hidden px-3 py-3 align-middle" title={u.fullName}>
+                    <span className="block truncate font-medium text-foreground">{u.fullName}</span>
                   </td>
-                  <td className="px-3 py-3 text-muted-foreground truncate" title={u.email}>
-                    {u.email}
+                  <td className="max-w-0 overflow-hidden px-3 py-3 align-middle" title={u.email}>
+                    <span className="block truncate text-muted-foreground">{u.email}</span>
                   </td>
-                  <td className="px-3 py-3 uppercase text-xs font-semibold tracking-wide">{u.role}</td>
-                  <td className="px-3 py-3 text-muted-foreground truncate" title={u.department || undefined}>
-                    {u.department || "—"}
+                  <td className="max-w-0 overflow-hidden px-3 py-3 align-middle">
+                    <span className="block truncate text-xs font-semibold uppercase tracking-wide">{u.role}</span>
                   </td>
-                  <td className="px-3 py-3 font-medium text-primary whitespace-nowrap">{u.staffId}</td>
-                  <td className="px-3 py-3">
+                  <td className="max-w-0 overflow-hidden px-3 py-3 align-middle" title={u.department || undefined}>
+                    <span className="block truncate text-muted-foreground">{u.department || "—"}</span>
+                  </td>
+                  <td className="max-w-0 overflow-hidden px-3 py-3 align-middle" title={u.staffId}>
+                    <span className="block truncate font-medium text-primary">{u.staffId}</span>
+                  </td>
+                  <td className="overflow-hidden px-3 py-3 align-middle text-center">
                     <Badge variant={statusVariant(u.status)} className="text-[10px] font-semibold">
                       {u.status}
                     </Badge>
                   </td>
-                  <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(u.createdAt)}</td>
-                  <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(u.lastLoginAt)}</td>
-                  <td className="px-3 py-3">
-                    <div className="flex items-center justify-end gap-0.5 whitespace-nowrap">
-                      <Button type="button" size="sm" variant="ghost" className="h-8 px-2" onClick={() => setViewing(u)}>
+                  <td className="max-w-0 overflow-hidden px-3 py-3 align-middle" title={fmtDate(u.createdAt)}>
+                    <span className="block truncate text-xs text-muted-foreground">{fmtDate(u.createdAt)}</span>
+                  </td>
+                  <td className="max-w-0 overflow-hidden px-3 py-3 align-middle" title={fmtDate(u.lastLoginAt)}>
+                    <span className="block truncate text-xs text-muted-foreground">{fmtDate(u.lastLoginAt)}</span>
+                  </td>
+                  <td className="overflow-hidden px-3 py-3 align-middle">
+                    <div className="flex items-center justify-start gap-4">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 shrink-0 px-0"
+                        onClick={() => setViewing(u)}
+                      >
                         View
                       </Button>
                       <Button
                         type="button"
                         size="sm"
                         variant="ghost"
-                        className="h-8 px-2"
+                        className="h-8 shrink-0 px-0"
                         onClick={() => setEditing({ ...u })}
                       >
                         Edit
