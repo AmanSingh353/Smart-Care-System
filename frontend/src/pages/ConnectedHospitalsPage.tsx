@@ -325,3 +325,59 @@ const ConnectedHospitalsPage = () => {
 };
 
 export default ConnectedHospitalsPage;
+
+/** Compact admin dashboard teaser — links to Connected Hospitals (API-backed). */
+export function NetworkQuickAccessCard() {
+  const { getAccessToken } = useAuth();
+  const [stats, setStats] = useState({ connected: 0, online: 0, pending: 0 });
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const token = await getAccessToken();
+        if (!token) return;
+        const res = await networkService.getSummary(token);
+        setStats({
+          connected: res.summary.connectedHospitalCount,
+          online: res.summary.hospitalsOnline,
+          pending: res.summary.pendingAssistanceRequests,
+        });
+      } catch {
+        /* ignore — empty/unavailable network */
+      }
+    })();
+  }, [getAccessToken]);
+
+  return (
+    <Card className="rounded-2xl shadow-card">
+      <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
+        <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <Building2 className="h-4 w-4 text-primary" />
+          Connected Hospitals
+        </CardTitle>
+        <Button asChild size="sm" variant="outline">
+          <Link to="/careguard/hospitals">Open network →</Link>
+        </Button>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground">
+          <span className="font-semibold text-foreground tabular-nums">{stats.connected}</span> partner
+          hospital{stats.connected === 1 ? "" : "s"}
+          {" · "}
+          <span className="font-semibold text-foreground tabular-nums">{stats.online}</span> online
+          {stats.pending > 0 && (
+            <>
+              {" · "}
+              <span className="font-semibold text-foreground tabular-nums">{stats.pending}</span> pending
+              request{stats.pending === 1 ? "" : "s"}
+            </>
+          )}
+        </p>
+        <p className="text-xs text-muted-foreground mt-2">
+          Discover network hospitals and send CareGuard assistance requests. Register partners under
+          Hospital Network.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}

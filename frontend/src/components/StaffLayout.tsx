@@ -43,14 +43,14 @@ const iconMap: Record<string, typeof LayoutDashboard> = {
 
 const GROUP_LABELS: Record<StaffRole, { title: string; paths?: string[] }[]> = {
   admin: [
-    { title: "Overview", paths: ["/admin", "/careguard"] },
+    { title: "Overview", paths: ["/admin", "/careguard", "/careguard/hospitals"] },
     { title: "Clinical", paths: ["/doctor", "/nurse"] },
     { title: "Diagnostics", paths: ["/lab", "/pharmacy"] },
-    { title: "Operations", paths: ["/reception", "/billing", "/admin/staff"] },
+    { title: "Operations", paths: ["/reception", "/billing", "/admin/staff", "/admin/network"] },
   ],
   reception: [{ title: "Front desk" }],
-  doctor: [{ title: "Clinical", paths: ["/doctor", "/careguard"] }],
-  nurse: [{ title: "Clinical", paths: ["/nurse", "/careguard"] }],
+  doctor: [{ title: "Clinical", paths: ["/doctor", "/careguard", "/careguard/hospitals"] }],
+  nurse: [{ title: "Clinical", paths: ["/nurse", "/careguard", "/careguard/hospitals"] }],
   pharmacy: [{ title: "Diagnostics", paths: ["/pharmacy", "/careguard"] }],
   billing: [{ title: "Finance", paths: ["/billing", "/careguard"] }],
   lab: [{ title: "Diagnostics", paths: ["/lab", "/careguard"] }],
@@ -111,7 +111,10 @@ export const StaffLayout = ({ children, allowedRoles }: { children: ReactNode; a
                 const active =
                   item.path === "/admin"
                     ? location.pathname === "/admin"
-                    : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
+                    : item.path === "/careguard"
+                      ? location.pathname === "/careguard"
+                      : location.pathname === item.path ||
+                        location.pathname.startsWith(`${item.path}/`);
                 const Icon = iconMap[item.label] || LayoutDashboard;
                 return (
                   <Link

@@ -24,6 +24,7 @@ import { StaffLayout } from "@/components/StaffLayout";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { StaffQuickAccessCard } from "@/components/admin/StaffManagement";
+import { NetworkQuickAccessCard } from "@/pages/ConnectedHospitalsPage";
 
 const AdminDashboard = () => {
   const { patients, getPatientById, updateFamilyRequestStatus, resetDemoData } = usePatients();
@@ -178,8 +179,9 @@ const AdminDashboard = () => {
         </CardContent>
       </Card>
 
-      <div className="mb-6">
+      <div className="mb-6 grid gap-4 md:grid-cols-2">
         <StaffQuickAccessCard />
+        <NetworkQuickAccessCard />
       </div>
 
       {delayedPatients.length > 0 && (
