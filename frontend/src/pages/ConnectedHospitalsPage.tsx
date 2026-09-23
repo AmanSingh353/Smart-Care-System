@@ -203,14 +203,24 @@ const ConnectedHospitalsPage = () => {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div>
-                  <p className="text-[10px] uppercase text-muted-foreground font-semibold">Departments</p>
+                  <p className="text-[10px] uppercase text-muted-foreground font-semibold">
+                    Departments
+                  </p>
                   <p className="text-sm text-foreground mt-0.5">
-                    {h.departments.length ? h.departments.join(", ") : "—"}
+                    {h.departments.length ? h.departments.join(" · ") : "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-muted-foreground font-semibold">
+                    Facilities
+                  </p>
+                  <p className="text-sm text-foreground mt-0.5">
+                    {h.facilities.length ? h.facilities.join(" · ") : "—"}
                   </p>
                 </div>
                 <div className="flex items-center justify-between gap-2 text-sm">
                   <span className="text-muted-foreground">
-                    Emergency support:{" "}
+                    Emergency Support:{" "}
                     <span className="font-medium text-foreground">
                       {h.emergencySupport ? "Available" : "Unavailable"}
                     </span>

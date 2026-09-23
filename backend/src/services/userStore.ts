@@ -361,19 +361,21 @@ export async function deleteStaffUser(id: string): Promise<StaffUser | null> {
 }
 
 /**
- * Safe one-time migration: assign staff missing hospitalId to the known local hospital.
- * Does not invent hospitals or reassign staff that already have a hospitalId.
+ * Safe migration: assign missing hospitalId, and remap legacy HOSP-LOCAL → HOSP-001.
+ * Does not invent hospitals or randomly reassign users already on other hospitals.
  */
 export async function migrateStaffHospitalAssignments(defaultHospitalId: string | null): Promise<number> {
   if (!defaultHospitalId) return 0;
+  const LEGACY = "HOSP-LOCAL";
   let updated = 0;
   const users = await listStaffUsers();
   for (const u of users) {
     const patch: Partial<StaffUser> = {};
     if (!u.hospitalId) {
       patch.hospitalId = defaultHospitalId;
+    } else if (u.hospitalId === LEGACY && defaultHospitalId !== LEGACY) {
+      patch.hospitalId = defaultHospitalId;
     }
-    // Bootstrap admin is platform operator
     if (u.staffId === "ADM-BOOTSTRAP" && u.role === "admin" && !u.isPlatformAdmin) {
       patch.isPlatformAdmin = true;
     }

@@ -336,6 +336,7 @@ export async function updateHospital(
   patch: Partial<
     Pick<
       Hospital,
+      | "hospitalId"
       | "hospitalName"
       | "registrationId"
       | "address"
@@ -351,6 +352,15 @@ export async function updateHospital(
     >
   >
 ): Promise<Hospital | null> {
+  if (patch.hospitalId) {
+    const other = await findHospitalByHospitalId(patch.hospitalId);
+    if (other && other.id !== id) {
+      throw Object.assign(new Error("A hospital with this hospitalId already exists"), {
+        status: 409,
+        code: "DUPLICATE_HOSPITAL",
+      });
+    }
+  }
   if (mongoReady && HospitalModel) {
     const doc = await HospitalModel.findByIdAndUpdate(id, { $set: patch }, { new: true }).lean();
     return doc ? fromMongo(doc as never) : null;
@@ -361,4 +371,16 @@ export async function updateHospital(
   memory.set(id, next);
   await persistFileStore();
   return next;
+}
+
+export async function deleteHospital(id: string): Promise<Hospital | null> {
+  const existing = await findHospitalById(id);
+  if (!existing) return null;
+  if (mongoReady && HospitalModel) {
+    await HospitalModel.findByIdAndDelete(id);
+    return existing;
+  }
+  memory.delete(id);
+  await persistFileStore();
+  return existing;
 }

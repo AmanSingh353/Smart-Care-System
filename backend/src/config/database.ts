@@ -1,15 +1,19 @@
 /**
  * Database / staff-store bootstrap.
  * MongoDB when MONGODB_URI is set; otherwise durable local file stores.
- * ensureBootstrapAdmin / ensureLocalHospital are idempotent and never wipe records.
+ * Demo hospital network + bootstrap admin are idempotent and never wipe records.
  */
 import mongoose from "mongoose";
 import { env } from "./env";
 import { initFirebaseAdmin } from "./firebaseAdmin";
 import { initUserStore, migrateStaffHospitalAssignments } from "../services/userStore";
 import { ensureBootstrapAdmin } from "../services/staffAuthService";
-import { ensureLocalHospital, getLocalHospital, initHospitalStore } from "../services/hospitalStore";
+import { getLocalHospital, initHospitalStore } from "../services/hospitalStore";
 import { initAssistanceRequestStore } from "../services/assistanceRequestStore";
+import {
+  DEMO_SMART_CARE_ID,
+  ensureDemoHospitalNetwork,
+} from "../services/demoHospitalNetwork";
 
 export async function connectDatabase(): Promise<void> {
   initFirebaseAdmin();
@@ -28,8 +32,10 @@ export async function connectDatabase(): Promise<void> {
   await initUserStore();
   await initHospitalStore();
   await initAssistanceRequestStore();
-  await ensureLocalHospital();
+  await ensureDemoHospitalNetwork();
   await ensureBootstrapAdmin();
   const local = await getLocalHospital();
-  await migrateStaffHospitalAssignments(local?.hospitalId || env.localHospitalId || null);
+  await migrateStaffHospitalAssignments(
+    local?.hospitalId || env.localHospitalId || DEMO_SMART_CARE_ID
+  );
 }

@@ -25,12 +25,12 @@ export const env = {
   bootstrapAdminPassword: cleanEnv(process.env.BOOTSTRAP_ADMIN_PASSWORD),
   bootstrapAdminName: cleanEnv(process.env.BOOTSTRAP_ADMIN_NAME) || "System Administrator",
   /** Identifies this SCS deployment on the Connected Hospitals network (idempotent bootstrap). */
-  localHospitalId: cleanEnv(process.env.LOCAL_HOSPITAL_ID) || "HOSP-LOCAL",
+  localHospitalId: cleanEnv(process.env.LOCAL_HOSPITAL_ID) || "HOSP-001",
   localHospitalName: cleanEnv(process.env.LOCAL_HOSPITAL_NAME) || "Smart Care Hospital",
   localHospitalRegistration: cleanEnv(process.env.LOCAL_HOSPITAL_REGISTRATION),
   localHospitalAddress: cleanEnv(process.env.LOCAL_HOSPITAL_ADDRESS),
-  localHospitalCity: cleanEnv(process.env.LOCAL_HOSPITAL_CITY),
-  localHospitalState: cleanEnv(process.env.LOCAL_HOSPITAL_STATE),
+  localHospitalCity: cleanEnv(process.env.LOCAL_HOSPITAL_CITY) || "Delhi",
+  localHospitalState: cleanEnv(process.env.LOCAL_HOSPITAL_STATE) || "Delhi",
   localHospitalPhone: cleanEnv(process.env.LOCAL_HOSPITAL_PHONE),
   localHospitalEmail: cleanEnv(process.env.LOCAL_HOSPITAL_EMAIL),
   localHospitalDepartments: cleanEnv(process.env.LOCAL_HOSPITAL_DEPARTMENTS)

@@ -59,7 +59,7 @@ const GROUP_LABELS: Record<StaffRole, { title: string; paths?: string[] }[]> = {
 export const StaffLayout = ({ children, allowedRoles }: { children: ReactNode; allowedRoles?: StaffRole[] }) => {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { role, staff, logout, loading } = useAuth();
+  const { role, staff, hospital, logout, loading } = useAuth();
   const { patients } = usePatients();
   const { getRoleSignals } = useCareGuard();
 
@@ -171,7 +171,14 @@ export const StaffLayout = ({ children, allowedRoles }: { children: ReactNode; a
 
         <div className="mx-3 mt-4 rounded-2xl bg-primary/5 border border-primary/10 px-3 py-2.5">
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Active role</p>
-          <p className="text-sm font-semibold text-foreground">{ROLE_LABELS[role]}</p>
+          <p className="text-sm font-semibold text-foreground">
+            {staff?.isPlatformAdmin ? "Platform Admin" : ROLE_LABELS[role]}
+          </p>
+          {hospital?.hospitalName && (
+            <p className="text-[11px] font-medium text-foreground truncate mt-0.5">
+              {hospital.hospitalName}
+            </p>
+          )}
           {staff?.fullName && (
             <p className="text-[11px] text-muted-foreground truncate mt-0.5">{staff.fullName}</p>
           )}
