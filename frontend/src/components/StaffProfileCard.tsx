@@ -4,7 +4,7 @@ import { UserCircle } from "lucide-react";
 
 /** Read-only staff profile — role cannot be changed by the staff member. */
 export function StaffProfileCard() {
-  const { staff, role } = useAuth();
+  const { staff, role, hospital } = useAuth();
   if (!staff || !role || role === "family") return null;
 
   return (
@@ -26,8 +26,14 @@ export function StaffProfileCard() {
         </div>
         <div>
           <p className="text-[10px] uppercase text-muted-foreground font-semibold">Role</p>
-          <p className="font-medium">{ROLE_LABELS[role]}</p>
+          <p className="font-medium">
+            {staff.isPlatformAdmin ? "Platform Admin" : ROLE_LABELS[role]}
+          </p>
           <p className="text-xs text-muted-foreground">Assigned by hospital administration — not editable here.</p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase text-muted-foreground font-semibold">Hospital</p>
+          <p className="font-medium">{hospital?.hospitalName || staff.hospitalId || "—"}</p>
         </div>
         <div>
           <p className="text-[10px] uppercase text-muted-foreground font-semibold">Department</p>

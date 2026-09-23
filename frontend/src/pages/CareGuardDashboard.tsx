@@ -51,7 +51,7 @@ function fmt(iso: string) {
 const CareGuardDashboard = () => {
   const { summary, getRoleSignals, openSignals, resetDemoSignals } = useCareGuard();
   const { resetDemoData } = usePatients();
-  const { role, getAccessToken } = useAuth();
+  const { role, getAccessToken, staff } = useAuth();
 
   const [netSummary, setNetSummary] = useState<NetworkSummary | null>(null);
   const [recentRequests, setRecentRequests] = useState<AssistanceRequest[]>([]);
@@ -134,9 +134,9 @@ const CareGuardDashboard = () => {
               {(netSummary?.incomingPending ?? 0) > 0 ? ` (${netSummary?.incomingPending})` : ""}
             </Link>
           </Button>
-          {role === "admin" && (
+          {role === "admin" && staff?.isPlatformAdmin && (
             <Button asChild size="sm" variant="outline">
-              <Link to="/admin/network">Network Admin</Link>
+              <Link to="/admin/network">Platform Network</Link>
             </Button>
           )}
         </div>

@@ -91,7 +91,11 @@ export const StaffLayout = ({ children, allowedRoles }: { children: ReactNode; a
     return <Navigate to={home} replace />;
   }
 
-  const navItems = ROLE_NAV[role] || [];
+  const navItems = (ROLE_NAV[role] || []).filter(item => {
+    // Platform network registration is not a hospital-facing admin workflow
+    if (item.path === "/admin/network" && !staff?.isPlatformAdmin) return false;
+    return true;
+  });
   const groups = GROUP_LABELS[role] || [{ title: "Workspace" }];
 
   const renderNav = (onNavigate?: () => void) => (

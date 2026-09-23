@@ -44,25 +44,35 @@ function parseList(raw: unknown): string[] {
   return [];
 }
 
-export async function getNetworkSummary() {
-  const local = await getLocalHospital();
+export async function getNetworkSummary(actorHospitalId?: string | null) {
   const hospitals = await listHospitals();
   const requests = await listAssistanceRequests();
-  const connected = hospitals.filter(h => !h.isLocal);
+  const myHospital = actorHospitalId
+    ? hospitals.find(h => h.hospitalId === actorHospitalId) || null
+    : await getLocalHospital();
+  const connected = hospitals.filter(h => !actorHospitalId || h.hospitalId !== actorHospitalId);
 
   const activeStatuses: AssistanceStatus[] = ["PENDING", "ACCEPTED", "IN_PROGRESS"];
-  const active = requests.filter(r => activeStatuses.includes(r.status));
-  const pending = requests.filter(r => r.status === "PENDING");
-  const accepted = requests.filter(r => r.status === "ACCEPTED");
-  const inProgress = requests.filter(r => r.status === "IN_PROGRESS");
-  const resolved = requests.filter(r => r.status === "RESOLVED");
+  const scoped = actorHospitalId
+    ? requests.filter(
+        r => r.requestingHospitalId === actorHospitalId || r.targetHospitalId === actorHospitalId
+      )
+    : requests;
+  const active = scoped.filter(r => activeStatuses.includes(r.status));
+  const pending = scoped.filter(r => r.status === "PENDING");
+  const accepted = scoped.filter(r => r.status === "ACCEPTED");
+  const inProgress = scoped.filter(r => r.status === "IN_PROGRESS");
+  const resolved = scoped.filter(r => r.status === "RESOLVED");
 
-  const localId = local?.hospitalId || "";
-  const outgoing = localId ? requests.filter(r => r.requestingHospitalId === localId) : [];
-  const incoming = localId ? requests.filter(r => r.targetHospitalId === localId) : [];
+  const outgoing = actorHospitalId
+    ? requests.filter(r => r.requestingHospitalId === actorHospitalId)
+    : [];
+  const incoming = actorHospitalId
+    ? requests.filter(r => r.targetHospitalId === actorHospitalId)
+    : [];
 
   return {
-    localHospital: local ? toPublicHospital(local) : null,
+    localHospital: myHospital ? toPublicHospital(myHospital) : null,
     connectedHospitalCount: connected.length,
     hospitalsOnline: connected.filter(h => h.status === "ONLINE").length,
     activeEmergencyRequests: active.length,
@@ -80,9 +90,12 @@ export async function listConnectedHospitals(query: {
   specialty?: string;
   status?: string;
   includeLocal?: boolean;
+  excludeHospitalId?: string | null;
 }) {
   let hospitals = await listHospitals();
-  if (!query.includeLocal) {
+  if (query.excludeHospitalId) {
+    hospitals = hospitals.filter(h => h.hospitalId !== query.excludeHospitalId);
+  } else if (!query.includeLocal) {
     hospitals = hospitals.filter(h => !h.isLocal);
   }
 
@@ -161,9 +174,19 @@ export async function registerConnectedHospital(input: Record<string, unknown>) 
   }
 }
 
-export async function patchHospital(id: string, input: Record<string, unknown>) {
+export async function patchHospital(
+  id: string,
+  input: Record<string, unknown>,
+  actor?: { hospitalId?: string | null; isPlatformAdmin?: boolean }
+) {
   const existing = await findHospitalById(id);
   if (!existing) throw new NetworkError("Hospital not found", 404, "HOSPITAL_NOT_FOUND");
+
+  if (actor && !actor.isPlatformAdmin) {
+    if (!actor.hospitalId || existing.hospitalId !== actor.hospitalId) {
+      throw new NetworkError("You can only update your own hospital", 403, "FORBIDDEN");
+    }
+  }
 
   const patch: Parameters<typeof updateHospital>[1] = {};
   if (input.hospitalName !== undefined) patch.hospitalName = String(input.hospitalName).trim();
@@ -189,24 +212,33 @@ export async function patchHospital(id: string, input: Record<string, unknown>) 
   return toPublicHospital(updated);
 }
 
-export async function createAssistance(input: Record<string, unknown>, staff: {
-  staffId: string;
-  fullName: string;
-}) {
-  const local = await getLocalHospital();
-  if (!local) {
+export async function createAssistance(
+  input: Record<string, unknown>,
+  staff: {
+    staffId: string;
+    fullName: string;
+    hospitalId: string;
+  }
+) {
+  const requestingHospitalId = staff.hospitalId?.trim();
+  if (!requestingHospitalId) {
     throw new NetworkError(
-      "Local hospital is not configured. Set LOCAL_HOSPITAL_ID on the backend.",
-      503,
-      "LOCAL_HOSPITAL_MISSING"
+      "Your account is not assigned to a hospital.",
+      403,
+      "HOSPITAL_UNASSIGNED"
     );
+  }
+
+  const requestingHospital = await findHospitalByHospitalId(requestingHospitalId);
+  if (!requestingHospital) {
+    throw new NetworkError("Your hospital record was not found", 404, "HOSPITAL_NOT_FOUND");
   }
 
   const targetHospitalId = String(input.targetHospitalId || "").trim();
   if (!targetHospitalId) {
     throw new NetworkError("targetHospitalId is required", 400, "VALIDATION");
   }
-  if (targetHospitalId === local.hospitalId) {
+  if (targetHospitalId === requestingHospitalId) {
     throw new NetworkError("Cannot send an assistance request to your own hospital", 400, "INVALID_TARGET");
   }
 
@@ -228,7 +260,7 @@ export async function createAssistance(input: Record<string, unknown>, staff: {
   }
 
   const request = await createAssistanceRequest({
-    requestingHospitalId: local.hospitalId,
+    requestingHospitalId,
     targetHospitalId,
     requestingStaffId: staff.staffId,
     requestingStaffName: staff.fullName,
@@ -246,27 +278,26 @@ export async function createAssistance(input: Record<string, unknown>, staff: {
 export async function listAssistance(query: {
   scope?: string;
   status?: string;
-  isAdmin?: boolean;
+  isPlatformAdmin?: boolean;
+  actorHospitalId?: string | null;
 }) {
-  const local = await getLocalHospital();
-  const localId = local?.hospitalId || "";
+  const actorHospitalId = query.actorHospitalId || "";
   const scope = (query.scope || "all").toLowerCase();
 
   let rows;
   if (scope === "incoming") {
-    if (!localId) return [];
-    rows = await listByTargetHospital(localId);
+    if (!actorHospitalId) return [];
+    rows = await listByTargetHospital(actorHospitalId);
   } else if (scope === "outgoing") {
-    if (!localId) return [];
-    rows = await listByRequestingHospital(localId);
-  } else if (scope === "network" && query.isAdmin) {
+    if (!actorHospitalId) return [];
+    rows = await listByRequestingHospital(actorHospitalId);
+  } else if (scope === "network" && query.isPlatformAdmin) {
     rows = await listAssistanceRequests();
   } else {
-    // Default for staff: local outgoing + incoming
-    if (!localId) return [];
+    if (!actorHospitalId) return [];
     const [out, inn] = await Promise.all([
-      listByRequestingHospital(localId),
-      listByTargetHospital(localId),
+      listByRequestingHospital(actorHospitalId),
+      listByTargetHospital(actorHospitalId),
     ]);
     const map = new Map(out.concat(inn).map(r => [r.id, r]));
     rows = [...map.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -281,17 +312,27 @@ export async function listAssistance(query: {
   return rows.map(toPublicAssistanceRequest);
 }
 
-export async function getAssistancePublic(id: string) {
+export async function getAssistancePublic(id: string, actor: {
+  hospitalId?: string | null;
+  isPlatformAdmin?: boolean;
+}) {
   const row = await findAssistanceById(id);
   if (!row) throw new NetworkError("Assistance request not found", 404, "REQUEST_NOT_FOUND");
+  if (
+    !actor.isPlatformAdmin &&
+    actor.hospitalId &&
+    row.requestingHospitalId !== actor.hospitalId &&
+    row.targetHospitalId !== actor.hospitalId
+  ) {
+    throw new NetworkError("Not authorized to view this request", 403, "FORBIDDEN");
+  }
   return toPublicAssistanceRequest(row);
 }
 
 export async function changeAssistanceStatus(
   id: string,
   nextStatusRaw: string,
-  actor: { role: string; staffId: string },
-  opts?: { adminNetwork?: boolean }
+  actor: { role: string; staffId: string; hospitalId?: string | null; isPlatformAdmin?: boolean }
 ) {
   const row = await findAssistanceById(id);
   if (!row) throw new NetworkError("Assistance request not found", 404, "REQUEST_NOT_FOUND");
@@ -310,23 +351,25 @@ export async function changeAssistanceStatus(
     );
   }
 
-  const local = await getLocalHospital();
-  const localId = local?.hospitalId || "";
-  const isAdmin = actor.role === "admin";
-  const isReceiver = localId && row.targetHospitalId === localId;
-  const isRequester = localId && row.requestingHospitalId === localId;
+  const actorHospitalId = actor.hospitalId || "";
+  const isPlatform = Boolean(actor.isPlatformAdmin);
+  const isReceiver = Boolean(actorHospitalId && row.targetHospitalId === actorHospitalId);
+  const isRequester = Boolean(actorHospitalId && row.requestingHospitalId === actorHospitalId);
 
-  // Cancel: requester or admin
   if (nextStatus === "CANCELLED") {
-    if (!isAdmin && !isRequester) {
+    if (!isPlatform && !isRequester) {
       throw new NetworkError("Only the requesting hospital can cancel this request", 403, "FORBIDDEN");
     }
-  } else if (nextStatus === "REJECTED" || nextStatus === "ACCEPTED" || nextStatus === "IN_PROGRESS" || nextStatus === "RESOLVED") {
-    // Receiving hospital (or admin network ops)
-    if (!isAdmin && !isReceiver && !opts?.adminNetwork) {
+  } else if (
+    nextStatus === "REJECTED" ||
+    nextStatus === "ACCEPTED" ||
+    nextStatus === "IN_PROGRESS" ||
+    nextStatus === "RESOLVED"
+  ) {
+    if (!isPlatform && !isReceiver) {
       throw new NetworkError("Only the receiving hospital can update this status", 403, "FORBIDDEN");
     }
-    if (!isAdmin && !["doctor", "nurse", "admin"].includes(actor.role)) {
+    if (!isPlatform && !["doctor", "nurse", "admin"].includes(actor.role)) {
       throw new NetworkError("Your role cannot modify assistance requests", 403, "FORBIDDEN");
     }
   }

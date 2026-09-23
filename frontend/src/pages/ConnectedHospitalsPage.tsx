@@ -126,8 +126,8 @@ const ConnectedHospitalsPage = () => {
   return (
     <StaffLayout allowedRoles={["admin", "doctor", "nurse"]}>
       <PageHeader
-        title="Connected Hospitals"
-        description="Discover network hospitals and request CareGuard assistance when needed."
+        title="Your Hospital Network"
+        description="Discover other hospitals on the Smart Care Network and request CareGuard assistance when needed."
       />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center mb-4">
@@ -179,15 +179,8 @@ const ConnectedHospitalsPage = () => {
           <CardContent className="py-4">
             <EmptyState
               icon={Building2}
-              title="No connected hospitals found"
-              description="Partner hospitals appear here after an administrator registers them on the network. Status is database-backed and configurable (not live presence)."
-              action={
-                role === "admin" ? (
-                  <Button asChild>
-                    <Link to="/admin/network">Open Network Admin</Link>
-                  </Button>
-                ) : undefined
-              }
+              title="No partner hospitals available"
+              description="Other hospitals registered on the Smart Care Network will appear here. Status is database-backed and configurable (not live presence telemetry)."
             />
           </CardContent>
         </Card>
@@ -374,8 +367,7 @@ export function NetworkQuickAccessCard() {
           )}
         </p>
         <p className="text-xs text-muted-foreground mt-2">
-          Discover network hospitals and send CareGuard assistance requests. Register partners under
-          Hospital Network.
+          Discover partner hospitals on the Smart Care Network and send CareGuard assistance requests.
         </p>
       </CardContent>
     </Card>

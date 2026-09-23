@@ -25,11 +25,21 @@ function handleAuthError(res: Response, err: unknown) {
 }
 
 function requireAdmin(req: Request, res: Response): boolean {
-  if (req.user?.role !== "admin") {
+  if (req.user?.role !== "admin" && !req.user?.isPlatformAdmin) {
     res.status(403).json({ error: "Forbidden", message: "Admin only" });
     return false;
   }
   return true;
+}
+
+function actorHospitalId(req: Request): string | null {
+  return req.staffUser?.hospitalId || req.user?.hospitalId || null;
+}
+
+function canManageStaff(req: Request, target: { hospitalId: string | null }): boolean {
+  if (req.user?.isPlatformAdmin) return true;
+  const hid = actorHospitalId(req);
+  return Boolean(hid && target.hospitalId && target.hospitalId === hid);
 }
 
 export const staffAuthController = {
@@ -49,9 +59,16 @@ export const staffAuthController = {
         console.info("[auth-diag] SESSION_REQUEST_STARTED");
       }
       const { user, firebase } = await resolveStaffSession(token);
+      let hospital: { hospitalId: string; hospitalName: string } | null = null;
+      if (user.hospitalId) {
+        const { findHospitalByHospitalId } = await import("../services/hospitalStore");
+        const h = await findHospitalByHospitalId(user.hospitalId);
+        if (h) hospital = { hospitalId: h.hospitalId, hospitalName: h.hospitalName };
+      }
       return res.json({
         user: toPublicStaffUser(user),
         role: user.role,
+        hospital,
         firebase: { uid: firebase.uid, email: firebase.email },
       });
     } catch (err) {
@@ -78,7 +95,10 @@ export const staffAuthController = {
   async listStaff(req: Request, res: Response) {
     try {
       if (!requireAdmin(req, res)) return;
-      const staff = await listStaff();
+      const staff = await listStaff({
+        platformAdmin: Boolean(req.user?.isPlatformAdmin),
+        hospitalId: actorHospitalId(req),
+      });
       return res.json({ staff });
     } catch (err) {
       return handleAuthError(res, err);
@@ -90,6 +110,9 @@ export const staffAuthController = {
       if (!requireAdmin(req, res)) return;
       const user = await findById(String(req.params.id || ""));
       if (!user) return res.status(404).json({ error: "NOT_FOUND", message: "Staff user not found" });
+      if (!canManageStaff(req, user)) {
+        return res.status(403).json({ error: "Forbidden", message: "Cannot access staff from another hospital" });
+      }
       return res.json({ user: toPublicStaffUser(user) });
     } catch (err) {
       return handleAuthError(res, err);
@@ -110,7 +133,26 @@ export const staffAuthController = {
   async createStaff(req: Request, res: Response) {
     try {
       if (!requireAdmin(req, res)) return;
+      const hospitalId = actorHospitalId(req);
+      // Ignore any client-supplied hospitalId — scope is always the authenticated hospital
       const { fullName, email, role, department, staffId, status, temporaryPassword } = req.body || {};
+      if (!hospitalId && !req.user?.isPlatformAdmin) {
+        return res.status(403).json({
+          error: "HOSPITAL_UNASSIGNED",
+          message: "Your account is not assigned to a hospital. Contact a platform administrator.",
+        });
+      }
+      // Platform admin creating staff without hospitalId on their own profile: require explicit hospitalId only for platform (validated against DB)
+      let targetHospitalId = hospitalId;
+      if (req.user?.isPlatformAdmin && typeof req.body?.hospitalId === "string" && req.body.hospitalId.trim()) {
+        targetHospitalId = String(req.body.hospitalId).trim();
+      }
+      if (!targetHospitalId) {
+        return res.status(403).json({
+          error: "HOSPITAL_UNASSIGNED",
+          message: "hospitalId is required to create staff for a hospital.",
+        });
+      }
       const result = await createStaffAccount({
         fullName,
         email,
@@ -119,6 +161,7 @@ export const staffAuthController = {
         staffId,
         status,
         temporaryPassword,
+        hospitalId: targetHospitalId,
       });
       const message = result.linkedExistingFirebase
         ? "Staff linked to existing Firebase account."
@@ -157,6 +200,15 @@ export const staffAuthController = {
       if (!existing) {
         return res.status(404).json({ error: "NOT_FOUND", message: "Staff user not found" });
       }
+      if (!canManageStaff(req, existing)) {
+        return res.status(403).json({ error: "Forbidden", message: "Cannot modify staff from another hospital" });
+      }
+      if (req.body?.hospitalId !== undefined && !req.user?.isPlatformAdmin) {
+        return res.status(403).json({
+          error: "Forbidden",
+          message: "Cannot change hospital assignment",
+        });
+      }
       const { fullName, role, department, staffId, status } = req.body || {};
       const patch: Record<string, string> = {};
       if (typeof fullName === "string") patch.fullName = fullName;
@@ -184,7 +236,6 @@ export const staffAuthController = {
       }
       const updated = await updateStaffUser(id, patch);
 
-      // Sync Firebase disabled flag with Suspend / Activate
       if (updated?.firebaseUid && patch.status) {
         const auth = getFirebaseAuth();
         if (auth) {
@@ -206,6 +257,9 @@ export const staffAuthController = {
       const existing = await findById(id);
       if (!existing) {
         return res.status(404).json({ error: "NOT_FOUND", message: "Staff user not found" });
+      }
+      if (!canManageStaff(req, existing)) {
+        return res.status(403).json({ error: "Forbidden", message: "Cannot delete staff from another hospital" });
       }
       if (req.user?.userId && req.user.userId === id) {
         return res.status(400).json({ error: "CANNOT_DELETE_SELF", message: "You cannot delete your own account" });

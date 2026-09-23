@@ -13,6 +13,9 @@ export interface AuthUser {
   department?: string;
   firebaseUid?: string;
   userId?: string;
+  /** Derived from StaffUser — never from client body. */
+  hospitalId?: string | null;
+  isPlatformAdmin?: boolean;
 }
 
 declare global {
@@ -69,6 +72,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       department: user.department,
       firebaseUid: user.firebaseUid || undefined,
       userId: user.id,
+      hospitalId: user.hospitalId,
+      isPlatformAdmin: Boolean(user.isPlatformAdmin),
     };
     next();
   } catch (err) {
@@ -93,7 +98,7 @@ export function requireRoles(...roles: StaffRole[]) {
     if (!req.user || req.user.role === "family") {
       return res.status(403).json({ error: "Forbidden", message: "Staff access required" });
     }
-    if (req.user.role === "admin") return next();
+    if (req.user.role === "admin" || req.user.isPlatformAdmin) return next();
     if (!roles.includes(req.user.role as StaffRole)) {
       return res.status(403).json({
         error: "Forbidden",
@@ -102,6 +107,29 @@ export function requireRoles(...roles: StaffRole[]) {
     }
     next();
   };
+}
+
+/** Platform / network operator only (not ordinary Hospital Admin). */
+export function requirePlatformAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.user || req.user.role === "family") {
+    return res.status(403).json({ error: "Forbidden", message: "Staff access required" });
+  }
+  if (!req.user.isPlatformAdmin) {
+    return res.status(403).json({
+      error: "Forbidden",
+      message: "Platform administrator access required",
+    });
+  }
+  next();
+}
+
+/** Hospital Admin or platform admin. */
+export function requireHospitalOrPlatformAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.user || req.user.role === "family") {
+    return res.status(403).json({ error: "Forbidden", message: "Staff access required" });
+  }
+  if (req.user.isPlatformAdmin || req.user.role === "admin") return next();
+  return res.status(403).json({ error: "Forbidden", message: "Admin only" });
 }
 
 export function canAccessPatient(req: Request, patientId: string): boolean {

@@ -181,7 +181,11 @@ async function recoverBootstrapAdminSession(uid: string, email: string): Promise
       role: "admin",
       status: "ACTIVE",
       firebaseUid: uid,
+      isPlatformAdmin: true,
     };
+    if (!existing.hospitalId && env.localHospitalId) {
+      patch.hospitalId = env.localHospitalId;
+    }
     return (await updateStaffUser(existing.id, patch)) || existing;
   }
 
@@ -199,6 +203,8 @@ async function recoverBootstrapAdminSession(uid: string, email: string): Promise
     staffId: "ADM-BOOTSTRAP",
     status: "ACTIVE",
     firebaseUid: uid,
+    hospitalId: env.localHospitalId || null,
+    isPlatformAdmin: true,
     mustChangePassword: false,
   });
 }
@@ -256,6 +262,8 @@ export async function createStaffAccount(input: {
   staffId: string;
   status?: string;
   temporaryPassword?: string;
+  /** Required — must come from authenticated StaffUser.hospitalId, never from client trust alone. */
+  hospitalId: string;
 }): Promise<{ user: StaffUser; linkedExistingFirebase: boolean; createdFirebase: boolean }> {
   const role = normalizeStaffRole(input.role);
   if (!role || !CREATABLE_STAFF_ROLES.includes(role)) {
@@ -263,6 +271,14 @@ export async function createStaffAccount(input: {
   }
   if (!input.email?.trim() || !input.fullName?.trim() || !input.staffId?.trim()) {
     throw new AuthError("fullName, email, and staffId are required", 400, "VALIDATION");
+  }
+  const hospitalId = input.hospitalId?.trim();
+  if (!hospitalId) {
+    throw new AuthError(
+      "Your account is not assigned to a hospital. Contact a platform administrator.",
+      403,
+      "HOSPITAL_UNASSIGNED"
+    );
   }
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email.trim());
   if (!emailOk) throw new AuthError("Enter a valid email address", 400, "INVALID_EMAIL");
@@ -328,7 +344,6 @@ export async function createStaffAccount(input: {
     } catch (err: unknown) {
       const code = err && typeof err === "object" && "code" in err ? String((err as { code: string }).code) : "";
       if (code === "auth/email-already-exists") {
-        // Race: another process created it — link instead of failing
         const existingFb = await auth.getUserByEmail(email);
         firebaseUid = existingFb.uid;
         linkedExistingFirebase = true;
@@ -368,6 +383,13 @@ export async function createStaffAccount(input: {
         "STAFF_IDENTITY_CONFLICT"
       );
     }
+    if (existingStaff.hospitalId && existingStaff.hospitalId !== hospitalId) {
+      throw new AuthError(
+        "This staff identity already belongs to another hospital.",
+        409,
+        "HOSPITAL_MISMATCH"
+      );
+    }
 
     const updated = await updateStaffUser(existingStaff.id, {
       fullName,
@@ -376,14 +398,14 @@ export async function createStaffAccount(input: {
       staffId,
       status: status === "INVITED" ? "INVITED" : status,
       firebaseUid,
-      // Existing Firebase password is preserved — do not force password change on link
+      hospitalId,
       mustChangePassword: linkedExistingFirebase ? false : existingStaff.mustChangePassword,
     });
     if (!updated) throw new AuthError("Failed to update staff user", 500, "UPDATE_FAILED");
     return { user: updated, linkedExistingFirebase, createdFirebase: false };
   }
 
-  // 4) Create new StaffUser linked to Firebase UID
+  // 4) Create new StaffUser linked to Firebase UID + hospital
   try {
     const user = await createStaffUser({
       email,
@@ -393,11 +415,12 @@ export async function createStaffAccount(input: {
       staffId,
       status: status === "INVITED" ? "INVITED" : status,
       firebaseUid,
+      hospitalId,
+      isPlatformAdmin: false,
       mustChangePassword: createdFirebase,
     });
     return { user, linkedExistingFirebase, createdFirebase };
   } catch (err: unknown) {
-    // Only roll back a Firebase user we just created in this request
     if (createdFirebase && firebaseUid) {
       await auth.deleteUser(firebaseUid).catch(() => undefined);
     }
@@ -476,6 +499,8 @@ export async function ensureBootstrapAdmin(): Promise<void> {
     if (existing.role !== "admin") patch.role = "admin";
     if (existing.status !== "ACTIVE") patch.status = "ACTIVE";
     if (firebaseUid && existing.firebaseUid !== firebaseUid) patch.firebaseUid = firebaseUid;
+    if (!existing.isPlatformAdmin) patch.isPlatformAdmin = true;
+    if (!existing.hospitalId && env.localHospitalId) patch.hospitalId = env.localHospitalId;
     if (Object.keys(patch).length) {
       await updateStaffUser(existing.id, patch);
       console.log(`[auth] Repaired bootstrap Admin StaffUser for ${email}`);
@@ -497,6 +522,8 @@ export async function ensureBootstrapAdmin(): Promise<void> {
     staffId: "ADM-BOOTSTRAP",
     status: "ACTIVE",
     firebaseUid,
+    hospitalId: env.localHospitalId || null,
+    isPlatformAdmin: true,
     mustChangePassword: false,
   });
   console.log(`[auth] Bootstrap admin StaffUser created for ${email} (Firebase password unchanged)`);
@@ -512,8 +539,19 @@ export function authStatusPayload() {
   };
 }
 
-export async function listStaff() {
-  const users = await listStaffUsers();
+export async function listStaff(opts?: { hospitalId?: string | null; platformAdmin?: boolean }) {
+  if (opts?.platformAdmin) {
+    const users = await listStaffUsers();
+    return users.map(toPublicStaffUser);
+  }
+  if (!opts?.hospitalId) {
+    throw new AuthError(
+      "Your account is not assigned to a hospital. Contact a platform administrator.",
+      403,
+      "HOSPITAL_UNASSIGNED"
+    );
+  }
+  const users = await listStaffUsers({ hospitalId: opts.hospitalId });
   return users.map(toPublicStaffUser);
 }
 

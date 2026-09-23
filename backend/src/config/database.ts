@@ -6,9 +6,9 @@
 import mongoose from "mongoose";
 import { env } from "./env";
 import { initFirebaseAdmin } from "./firebaseAdmin";
-import { initUserStore } from "../services/userStore";
+import { initUserStore, migrateStaffHospitalAssignments } from "../services/userStore";
 import { ensureBootstrapAdmin } from "../services/staffAuthService";
-import { ensureLocalHospital, initHospitalStore } from "../services/hospitalStore";
+import { ensureLocalHospital, getLocalHospital, initHospitalStore } from "../services/hospitalStore";
 import { initAssistanceRequestStore } from "../services/assistanceRequestStore";
 
 export async function connectDatabase(): Promise<void> {
@@ -28,6 +28,8 @@ export async function connectDatabase(): Promise<void> {
   await initUserStore();
   await initHospitalStore();
   await initAssistanceRequestStore();
-  await ensureBootstrapAdmin();
   await ensureLocalHospital();
+  await ensureBootstrapAdmin();
+  const local = await getLocalHospital();
+  await migrateStaffHospitalAssignments(local?.hospitalId || env.localHospitalId || null);
 }

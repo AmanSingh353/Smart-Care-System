@@ -71,7 +71,7 @@ function statusVariant(status: StaffAccountStatus): "default" | "secondary" | "d
 }
 
 export function StaffManagement() {
-  const { getAccessToken } = useAuth();
+  const { getAccessToken, hospital } = useAuth();
   const [staff, setStaff] = useState<StaffProfile[]>([]);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<StaffRole | "all">("all");
@@ -310,6 +310,13 @@ export function StaffManagement() {
 
   return (
     <div className="space-y-6">
+      {hospital && (
+        <p className="text-sm text-muted-foreground">
+          Managing staff for{" "}
+          <span className="font-semibold text-foreground">{hospital.hospitalName}</span>
+          <span className="font-mono text-xs ml-2">({hospital.hospitalId})</span>
+        </p>
+      )}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-1 min-w-0">
           <div className="relative flex-1 min-w-0 max-w-md">

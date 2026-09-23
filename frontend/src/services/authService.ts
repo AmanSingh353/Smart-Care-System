@@ -13,6 +13,8 @@ export interface StaffProfile {
   department: string;
   staffId: string;
   status: StaffAccountStatus;
+  hospitalId: string | null;
+  isPlatformAdmin?: boolean;
   mustChangePassword?: boolean;
   createdAt: string;
   updatedAt: string;
@@ -30,11 +32,12 @@ export const authService = {
     }>("/api/auth"),
 
   session: (idToken: string) =>
-    api.post<{ user: StaffProfile; role: StaffRole; firebase: { uid: string; email?: string } }>(
-      "/api/auth/session",
-      { idToken },
-      { Authorization: `Bearer ${idToken}` }
-    ),
+    api.post<{
+      user: StaffProfile;
+      role: StaffRole;
+      hospital: { hospitalId: string; hospitalName: string } | null;
+      firebase: { uid: string; email?: string };
+    }>("/api/auth/session", { idToken }, { Authorization: `Bearer ${idToken}` }),
 
   me: (idToken: string) =>
     api.get<{ user: StaffProfile }>("/api/auth/me", { Authorization: `Bearer ${idToken}` }),

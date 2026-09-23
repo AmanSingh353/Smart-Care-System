@@ -56,7 +56,7 @@ function fmt(iso: string) {
 }
 
 const AdminNetworkPage = () => {
-  const { getAccessToken } = useAuth();
+  const { getAccessToken, staff } = useAuth();
   const [summary, setSummary] = useState<NetworkSummary | null>(null);
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
   const [requests, setRequests] = useState<AssistanceRequest[]>([]);
@@ -65,8 +65,10 @@ const AdminNetworkPage = () => {
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState(emptyHospitalForm);
   const [busy, setBusy] = useState(false);
+  const isPlatform = Boolean(staff?.isPlatformAdmin);
 
   const refresh = useCallback(async () => {
+    if (!isPlatform) return;
     const token = await getAccessToken();
     if (!token) return;
     const [sum, hosp, req] = await Promise.all([
@@ -77,11 +79,31 @@ const AdminNetworkPage = () => {
     setSummary(sum.summary);
     setHospitals(hosp.hospitals);
     setRequests(req.requests);
-  }, [getAccessToken]);
+  }, [getAccessToken, isPlatform]);
 
   useEffect(() => {
     refresh().catch(err => setError(formatNetworkError(err)));
   }, [refresh]);
+
+  if (!isPlatform) {
+    return (
+      <StaffLayout allowedRoles={["admin"]}>
+        <PageHeader
+          title="Hospital Network"
+          description="Platform-level hospital registration for the Smart Care Network."
+        />
+        <Card className="rounded-2xl shadow-card">
+          <CardContent className="py-4">
+            <EmptyState
+              icon={Building2}
+              title="Platform administrator access required"
+              description="Hospital Admins manage their own hospital and staff. Registering partner hospitals is a platform Network function."
+            />
+          </CardContent>
+        </Card>
+      </StaffLayout>
+    );
+  }
 
   const onRegister = async (e: React.FormEvent) => {
     e.preventDefault();

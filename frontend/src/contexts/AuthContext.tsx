@@ -25,6 +25,7 @@ interface AuthContextType {
   role: StaffRole | "family" | null;
   patientId: string | null;
   staff: StaffProfile | null;
+  hospital: { hospitalId: string; hospitalName: string } | null;
   loading: boolean;
   firebaseReady: boolean;
   loginStaffEmailPassword: (email: string, password: string) => Promise<StaffProfile>;
@@ -41,7 +42,12 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const STORAGE_KEY = "scs30-auth";
 
 type StoredAuth =
-  | { kind: "staff"; role: StaffRole; staff: StaffProfile }
+  | {
+      kind: "staff";
+      role: StaffRole;
+      staff: StaffProfile;
+      hospital?: { hospitalId: string; hospitalName: string } | null;
+    }
   | { kind: "family"; role: "family"; patientId: string };
 
 function readStored(): StoredAuth | null {
@@ -82,6 +88,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [role, setRole] = useState<StaffRole | "family" | null>(null);
   const [patientId, setPatientId] = useState<string | null>(null);
   const [staff, setStaff] = useState<StaffProfile | null>(null);
+  const [hospital, setHospital] = useState<{ hospitalId: string; hospitalName: string } | null>(
+    null
+  );
   const [loading, setLoading] = useState(true);
   const firebaseReady = isFirebaseClientConfigured();
 
@@ -98,12 +107,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => setAuthTokenProvider(null);
   }, [getAccessToken]);
 
-  const applyStaff = useCallback((profile: StaffProfile) => {
-    setRole(profile.role);
-    setPatientId(null);
-    setStaff(profile);
-    writeStored({ kind: "staff", role: profile.role, staff: profile });
-  }, []);
+  const applyStaff = useCallback(
+    (
+      profile: StaffProfile,
+      hospitalInfo?: { hospitalId: string; hospitalName: string } | null
+    ) => {
+      setRole(profile.role);
+      setPatientId(null);
+      setStaff(profile);
+      const nextHospital =
+        hospitalInfo === undefined
+          ? profile.hospitalId
+            ? { hospitalId: profile.hospitalId, hospitalName: profile.hospitalId }
+            : null
+          : hospitalInfo;
+      setHospital(nextHospital);
+      writeStored({
+        kind: "staff",
+        role: profile.role,
+        staff: profile,
+        hospital: nextHospital,
+      });
+    },
+    []
+  );
 
   const establishStaffSession = useCallback(
     async (forceRefresh = true) => {
@@ -121,7 +148,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           STAFF_ROLE: result.user.role,
           STAFF_STATUS: result.user.status,
         });
-        applyStaff(result.user);
+        applyStaff(result.user, result.hospital);
         return result.user;
       } catch (err) {
         if (err instanceof ApiError) {
@@ -171,6 +198,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             writeStored(null);
             setRole(null);
             setStaff(null);
+            setHospital(null);
           }
           setLoading(false);
           return;
@@ -241,6 +269,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setRole("family");
     setPatientId(patient);
     setStaff(null);
+    setHospital(null);
     writeStored({ kind: "family", role: "family", patientId: patient });
   };
 
@@ -249,6 +278,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setRole(null);
     setPatientId(null);
     setStaff(null);
+    setHospital(null);
     await firebaseSignOut().catch(() => undefined);
   };
 
@@ -258,6 +288,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         role,
         patientId,
         staff,
+        hospital,
         loading,
         firebaseReady,
         loginStaffEmailPassword,
@@ -377,7 +408,7 @@ export const ROLE_NAV: Record<StaffRole, { label: string; path: string }[]> = {
 };
 
 export const ROLE_LABELS: Record<StaffRole | "family", string> = {
-  admin: "Admin",
+  admin: "Hospital Admin",
   reception: "Reception",
   doctor: "Doctor",
   nurse: "Nurse",

@@ -22,6 +22,13 @@ export interface StaffUser {
   department: string;
   staffId: string;
   status: StaffAccountStatus;
+  /** Business key matching Hospital.hospitalId — never taken from the client for authorization. */
+  hospitalId: string | null;
+  /**
+   * Platform / network operator for the Smart Care Network.
+   * Distinct from role "admin" (Hospital Admin), which is scoped to hospitalId.
+   */
+  isPlatformAdmin: boolean;
   /** True after Admin creates account with a temporary password; cleared after first password change. */
   mustChangePassword: boolean;
   createdAt: string;
@@ -39,7 +46,7 @@ export const STAFF_ROLES: StaffRole[] = [
   "lab",
 ];
 
-/** Roles Admin may create via Staff Management (Admin is bootstrap-only). */
+/** Roles Hospital Admin may create via Staff Management (Hospital Admin itself is bootstrap/platform-managed). */
 export const CREATABLE_STAFF_ROLES: StaffRole[] = [
   "doctor",
   "nurse",
@@ -59,6 +66,10 @@ export function normalizeStaffStatus(raw: string): StaffAccountStatus | null {
   return (STAFF_STATUSES as string[]).includes(s) ? (s as StaffAccountStatus) : null;
 }
 
+export function isHospitalAdmin(u: Pick<StaffUser, "role" | "isPlatformAdmin">): boolean {
+  return u.role === "admin" && !u.isPlatformAdmin;
+}
+
 export function toPublicStaffUser(u: StaffUser) {
   return {
     id: u.id,
@@ -69,6 +80,8 @@ export function toPublicStaffUser(u: StaffUser) {
     department: u.department,
     staffId: u.staffId,
     status: u.status,
+    hospitalId: u.hospitalId,
+    isPlatformAdmin: Boolean(u.isPlatformAdmin),
     mustChangePassword: Boolean(u.mustChangePassword),
     createdAt: u.createdAt,
     updatedAt: u.updatedAt,

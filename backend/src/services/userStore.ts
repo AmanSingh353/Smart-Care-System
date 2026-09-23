@@ -34,6 +34,8 @@ interface StaffUserMongo {
   department: string;
   staffId: string;
   status: StaffAccountStatus;
+  hospitalId: string | null;
+  isPlatformAdmin: boolean;
   mustChangePassword: boolean;
   lastLoginAt: Date | null;
   createdAt: Date;
@@ -49,6 +51,8 @@ const StaffUserSchema = new Schema<StaffUserMongo>(
     department: { type: String, default: "" },
     staffId: { type: String, required: true, unique: true },
     status: { type: String, required: true, enum: STAFF_STATUSES },
+    hospitalId: { type: String, default: null, index: true },
+    isPlatformAdmin: { type: Boolean, default: false },
     mustChangePassword: { type: Boolean, default: false },
     lastLoginAt: { type: Date, default: null },
   },
@@ -69,6 +73,8 @@ function fromMongo(
     department: doc.department,
     staffId: doc.staffId,
     status: doc.status,
+    hospitalId: doc.hospitalId ?? null,
+    isPlatformAdmin: Boolean(doc.isPlatformAdmin),
     mustChangePassword: Boolean(doc.mustChangePassword),
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
@@ -95,6 +101,8 @@ async function loadFileStore(): Promise<void> {
         department: String(u.department || ""),
         staffId: String(u.staffId || ""),
         status: u.status || "ACTIVE",
+        hospitalId: u.hospitalId ?? null,
+        isPlatformAdmin: Boolean(u.isPlatformAdmin),
         mustChangePassword: Boolean(u.mustChangePassword),
         createdAt: u.createdAt || new Date().toISOString(),
         updatedAt: u.updatedAt || new Date().toISOString(),
@@ -152,12 +160,18 @@ export async function initUserStore(): Promise<void> {
   }
 }
 
-export async function listStaffUsers(): Promise<StaffUser[]> {
+export async function listStaffUsers(filter?: { hospitalId?: string }): Promise<StaffUser[]> {
   if (mongoReady && StaffModel) {
-    const docs = await StaffModel.find().sort({ createdAt: 1 }).lean();
+    const q: Record<string, unknown> = {};
+    if (filter?.hospitalId) q.hospitalId = filter.hospitalId;
+    const docs = await StaffModel.find(q).sort({ createdAt: 1 }).lean();
     return docs.map(d => fromMongo(d as never));
   }
-  return [...memory.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  let rows = [...memory.values()];
+  if (filter?.hospitalId) {
+    rows = rows.filter(u => u.hospitalId === filter.hospitalId);
+  }
+  return rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
 export async function findByEmail(email: string): Promise<StaffUser | null> {
@@ -225,6 +239,8 @@ export async function createStaffUser(input: {
   staffId: string;
   status?: StaffAccountStatus;
   firebaseUid?: string | null;
+  hospitalId?: string | null;
+  isPlatformAdmin?: boolean;
   mustChangePassword?: boolean;
 }): Promise<StaffUser> {
   const email = input.email.trim().toLowerCase();
@@ -238,6 +254,8 @@ export async function createStaffUser(input: {
     throw Object.assign(new Error("A staff user with this Staff ID already exists"), { status: 409, code: "DUPLICATE_STAFF_ID" });
   }
   const mustChangePassword = Boolean(input.mustChangePassword);
+  const hospitalId = input.hospitalId?.trim() || null;
+  const isPlatformAdmin = Boolean(input.isPlatformAdmin);
   if (mongoReady && StaffModel) {
     const doc = await StaffModel.create({
       firebaseUid: input.firebaseUid ?? null,
@@ -247,6 +265,8 @@ export async function createStaffUser(input: {
       department: input.department.trim(),
       staffId,
       status: input.status || "ACTIVE",
+      hospitalId,
+      isPlatformAdmin,
       mustChangePassword,
       lastLoginAt: null,
     });
@@ -263,6 +283,8 @@ export async function createStaffUser(input: {
     department: input.department.trim(),
     staffId,
     status: input.status || "ACTIVE",
+    hospitalId,
+    isPlatformAdmin,
     mustChangePassword,
     createdAt: now,
     updatedAt: now,
@@ -278,7 +300,16 @@ export async function updateStaffUser(
   patch: Partial<
     Pick<
       StaffUser,
-      "fullName" | "role" | "department" | "staffId" | "status" | "firebaseUid" | "lastLoginAt" | "mustChangePassword"
+      | "fullName"
+      | "role"
+      | "department"
+      | "staffId"
+      | "status"
+      | "firebaseUid"
+      | "hospitalId"
+      | "isPlatformAdmin"
+      | "lastLoginAt"
+      | "mustChangePassword"
     >
   >
 ): Promise<StaffUser | null> {
@@ -327,4 +358,32 @@ export async function deleteStaffUser(id: string): Promise<StaffUser | null> {
   memory.delete(id);
   await persistFileStore();
   return existing;
+}
+
+/**
+ * Safe one-time migration: assign staff missing hospitalId to the known local hospital.
+ * Does not invent hospitals or reassign staff that already have a hospitalId.
+ */
+export async function migrateStaffHospitalAssignments(defaultHospitalId: string | null): Promise<number> {
+  if (!defaultHospitalId) return 0;
+  let updated = 0;
+  const users = await listStaffUsers();
+  for (const u of users) {
+    const patch: Partial<StaffUser> = {};
+    if (!u.hospitalId) {
+      patch.hospitalId = defaultHospitalId;
+    }
+    // Bootstrap admin is platform operator
+    if (u.staffId === "ADM-BOOTSTRAP" && u.role === "admin" && !u.isPlatformAdmin) {
+      patch.isPlatformAdmin = true;
+    }
+    if (Object.keys(patch).length) {
+      await updateStaffUser(u.id, patch);
+      updated += 1;
+    }
+  }
+  if (updated > 0) {
+    console.log(`[users] Migrated hospital assignment on ${updated} staff record(s) → ${defaultHospitalId}`);
+  }
+  return updated;
 }
