@@ -11,6 +11,7 @@ import mongoose, { Schema, type Model } from "mongoose";
 import { env } from "../config/env";
 import type { StaffAccountStatus, StaffRole, StaffUser } from "../models/User";
 import { STAFF_ROLES, STAFF_STATUSES } from "../models/User";
+import { writeJsonAtomic } from "../utils/writeJsonAtomic";
 
 const memory = new Map<string, StaffUser>();
 let seq = 1;
@@ -135,9 +136,7 @@ async function persistFileStore(): Promise<void> {
     seq,
     users: [...memory.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
   };
-  const tmp = `${STAFF_FILE}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(payload, null, 2), "utf8");
-  await fs.rename(tmp, STAFF_FILE);
+  await writeJsonAtomic(STAFF_FILE, payload);
 }
 
 export async function initUserStore(): Promise<void> {

@@ -15,6 +15,7 @@ import {
   type AssistanceRequest,
   type AssistanceStatus,
 } from "../models/AssistanceRequest";
+import { writeJsonAtomic } from "../utils/writeJsonAtomic";
 
 const memory = new Map<string, AssistanceRequest>();
 let seq = 1;
@@ -148,9 +149,7 @@ async function persistFileStore(): Promise<void> {
     seq,
     requests: [...memory.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
   };
-  const tmp = `${REQUEST_FILE}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(payload, null, 2), "utf8");
-  await fs.rename(tmp, REQUEST_FILE);
+  await writeJsonAtomic(REQUEST_FILE, payload);
 }
 
 export async function initAssistanceRequestStore(): Promise<void> {

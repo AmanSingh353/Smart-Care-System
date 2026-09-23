@@ -12,6 +12,7 @@ import {
   type Hospital,
   type HospitalStatus,
 } from "../models/Hospital";
+import { writeJsonAtomic } from "../utils/writeJsonAtomic";
 
 const memory = new Map<string, Hospital>();
 let seq = 1;
@@ -150,9 +151,7 @@ async function persistFileStore(): Promise<void> {
     seq,
     hospitals: [...memory.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
   };
-  const tmp = `${HOSPITAL_FILE}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(payload, null, 2), "utf8");
-  await fs.rename(tmp, HOSPITAL_FILE);
+  await writeJsonAtomic(HOSPITAL_FILE, payload);
 }
 
 export async function initHospitalStore(): Promise<void> {

@@ -35,7 +35,7 @@ function statusVariant(status: HospitalStatus): "default" | "secondary" | "outli
 }
 
 const ConnectedHospitalsPage = () => {
-  const { getAccessToken, role } = useAuth();
+  const { getAccessToken, role, loading: authLoading } = useAuth();
   const canRequest = role === "admin" || role === "doctor" || role === "nurse";
 
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
@@ -56,6 +56,8 @@ const ConnectedHospitalsPage = () => {
   });
 
   const refresh = useCallback(async () => {
+    // Page hooks run while StaffLayout still shows "Restoring session…" — wait for auth.
+    if (authLoading) return;
     const token = await getAccessToken();
     if (!token) return;
     const res = await networkService.listHospitals(token, {
@@ -64,7 +66,7 @@ const ConnectedHospitalsPage = () => {
       status: statusFilter === "all" ? undefined : statusFilter,
     });
     setHospitals(res.hospitals);
-  }, [getAccessToken, search, specialty, statusFilter]);
+  }, [authLoading, getAccessToken, search, specialty, statusFilter]);
 
   useEffect(() => {
     refresh().catch(err => setError(formatNetworkError(err)));
