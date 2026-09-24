@@ -48,6 +48,8 @@ const IncomingRequestsPage = () => {
   const [message, setMessage] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  const pendingCount = requests.filter(r => r.status === "PENDING").length;
+
   const refresh = useCallback(async () => {
     if (authLoading) return;
     const token = await getAccessToken();
@@ -91,7 +93,7 @@ const IncomingRequestsPage = () => {
   return (
     <StaffLayout allowedRoles={["admin", "doctor", "nurse"]}>
       <PageHeader
-        title="Incoming Requests"
+        title={pendingCount > 0 ? `Incoming Requests  ${pendingCount}` : "Incoming Requests"}
         description={
           isPlatform
             ? "Network-wide CareGuard assistance requests. Accept, start, and resolve on behalf of partner hospitals for the demo."
