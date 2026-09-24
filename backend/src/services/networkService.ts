@@ -259,6 +259,24 @@ export async function createAssistance(
     throw new NetworkError("emergencyType and requiredDepartment are required", 400, "VALIDATION");
   }
 
+  // Guard double-submit: same hospital→target→emergency within 60s while still PENDING
+  const outgoing = await listByRequestingHospital(requestingHospitalId);
+  const duplicate = outgoing.find(r => {
+    if (r.status !== "PENDING") return false;
+    if (r.targetHospitalId !== targetHospitalId) return false;
+    if (r.emergencyType !== emergencyType) return false;
+    if (r.requiredDepartment !== requiredDepartment) return false;
+    const age = Date.now() - new Date(r.createdAt).getTime();
+    return age >= 0 && age < 60_000;
+  });
+  if (duplicate) {
+    throw new NetworkError(
+      "A matching assistance request was just submitted. Wait a moment or open Incoming Requests.",
+      409,
+      "DUPLICATE_REQUEST"
+    );
+  }
+
   const request = await createAssistanceRequest({
     requestingHospitalId,
     targetHospitalId,
@@ -286,8 +304,14 @@ export async function listAssistance(query: {
 
   let rows;
   if (scope === "incoming") {
-    if (!actorHospitalId) return [];
-    rows = await listByTargetHospital(actorHospitalId);
+    // Platform admins can oversee network-wide incoming (hackathon single-login demo).
+    // Ordinary staff only see requests targeted at their own hospital.
+    if (query.isPlatformAdmin) {
+      rows = await listAssistanceRequests();
+    } else {
+      if (!actorHospitalId) return [];
+      rows = await listByTargetHospital(actorHospitalId);
+    }
   } else if (scope === "outgoing") {
     if (!actorHospitalId) return [];
     rows = await listByRequestingHospital(actorHospitalId);

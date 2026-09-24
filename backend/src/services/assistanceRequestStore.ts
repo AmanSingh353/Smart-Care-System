@@ -221,11 +221,8 @@ export async function createAssistanceRequest(input: {
   shortDescription?: string;
   patientReference?: string;
 }): Promise<AssistanceRequest> {
-  const requestId = `ARQ-${Date.now().toString(36).toUpperCase()}-${Math.random()
-    .toString(36)
-    .slice(2, 6)
-    .toUpperCase()}`;
-
+  const n = seq++;
+  const requestId = `CG-${1000 + n}`;
   const dup = await findAssistanceByRequestId(requestId);
   if (dup) {
     throw Object.assign(new Error("Request ID collision — retry"), {
@@ -255,7 +252,7 @@ export async function createAssistanceRequest(input: {
   }
 
   const now = new Date().toISOString();
-  const id = `AR-${seq++}`;
+  const id = `AR-${n}`;
   const row: AssistanceRequest = {
     id,
     requestId,

@@ -28,6 +28,29 @@ import { Building2, Search, Siren } from "lucide-react";
 
 const STATUS_OPTIONS: Array<HospitalStatus | "all"> = ["all", "ONLINE", "BUSY", "OFFLINE"];
 
+const EMERGENCY_TYPES = [
+  "Cardiac Emergency",
+  "Trauma",
+  "Neurological Emergency",
+  "General Emergency",
+] as const;
+
+const DEPARTMENT_OPTIONS = [
+  "Cardiology",
+  "Neurology",
+  "Emergency Medicine",
+  "Critical Care",
+  "Trauma Care",
+] as const;
+
+const FACILITY_OPTIONS = [
+  "ICU",
+  "Cardiac Care Unit",
+  "Emergency Department",
+  "Trauma Centre",
+  "Blood Bank",
+] as const;
+
 function statusVariant(status: HospitalStatus): "default" | "secondary" | "outline" {
   if (status === "ONLINE") return "default";
   if (status === "BUSY") return "secondary";
@@ -48,9 +71,9 @@ const ConnectedHospitalsPage = () => {
   const [target, setTarget] = useState<Hospital | null>(null);
   const [form, setForm] = useState({
     priority: "HIGH" as AssistancePriority,
-    emergencyType: "",
-    requiredDepartment: "",
-    requiredFacilities: "",
+    emergencyType: EMERGENCY_TYPES[0],
+    requiredDepartment: DEPARTMENT_OPTIONS[0],
+    requiredFacilities: FACILITY_OPTIONS[0],
     shortDescription: "",
     patientReference: "",
   });
@@ -82,11 +105,19 @@ const ConnectedHospitalsPage = () => {
     setError(null);
     setMessage(null);
     setTarget(h);
+    const dept =
+      DEPARTMENT_OPTIONS.find(d => h.departments.includes(d)) ||
+      h.departments[0] ||
+      DEPARTMENT_OPTIONS[0];
+    const facility =
+      FACILITY_OPTIONS.find(f => h.facilities.includes(f)) ||
+      h.facilities[0] ||
+      FACILITY_OPTIONS[0];
     setForm({
       priority: "HIGH",
-      emergencyType: "",
-      requiredDepartment: h.departments[0] || "",
-      requiredFacilities: "",
+      emergencyType: EMERGENCY_TYPES[0],
+      requiredDepartment: dept,
+      requiredFacilities: facility,
       shortDescription: "",
       patientReference: "",
     });
@@ -110,13 +141,12 @@ const ConnectedHospitalsPage = () => {
         emergencyType: form.emergencyType.trim(),
         requiredDepartment: form.requiredDepartment.trim(),
         requiredFacilities: form.requiredFacilities
-          .split(",")
-          .map(s => s.trim())
-          .filter(Boolean),
+          ? [form.requiredFacilities.trim()].filter(Boolean)
+          : [],
         shortDescription: form.shortDescription.trim(),
         patientReference: form.patientReference.trim(),
       });
-      setMessage(res.message);
+      setMessage(`${res.message} (${res.request.requestId})`);
       setTarget(null);
     } catch (err) {
       setError(formatNetworkError(err));
@@ -257,6 +287,11 @@ const ConnectedHospitalsPage = () => {
           </DialogHeader>
           <form onSubmit={submitRequest} className="grid gap-3">
             <div>
+              <Label>Target hospital</Label>
+              <p className="mt-1 text-sm font-medium text-foreground">{target?.hospitalName}</p>
+              <p className="text-xs text-muted-foreground font-mono">{target?.hospitalId}</p>
+            </div>
+            <div>
               <Label>Priority</Label>
               <select
                 className="w-full mt-1 h-10 rounded-xl border border-input bg-background px-3 text-sm"
@@ -270,34 +305,50 @@ const ConnectedHospitalsPage = () => {
             </div>
             <div>
               <Label>Emergency type</Label>
-              <Input
-                className="mt-1 rounded-xl"
+              <select
+                className="w-full mt-1 h-10 rounded-xl border border-input bg-background px-3 text-sm"
                 value={form.emergencyType}
                 onChange={e => setForm(f => ({ ...f, emergencyType: e.target.value }))}
-                placeholder="e.g. Trauma surge, ICU overflow"
                 required
-              />
+              >
+                {EMERGENCY_TYPES.map(t => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <Label>Required department</Label>
-              <Input
-                className="mt-1 rounded-xl"
+              <select
+                className="w-full mt-1 h-10 rounded-xl border border-input bg-background px-3 text-sm"
                 value={form.requiredDepartment}
                 onChange={e => setForm(f => ({ ...f, requiredDepartment: e.target.value }))}
                 required
-              />
+              >
+                {DEPARTMENT_OPTIONS.map(d => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
-              <Label>Required facilities (comma-separated)</Label>
-              <Input
-                className="mt-1 rounded-xl"
+              <Label>Required facility</Label>
+              <select
+                className="w-full mt-1 h-10 rounded-xl border border-input bg-background px-3 text-sm"
                 value={form.requiredFacilities}
                 onChange={e => setForm(f => ({ ...f, requiredFacilities: e.target.value }))}
-                placeholder="ICU, Ventilator"
-              />
+              >
+                {FACILITY_OPTIONS.map(f => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
-              <Label>Patient reference (ID / code only)</Label>
+              <Label>Patient reference (optional)</Label>
               <Input
                 className="mt-1 rounded-xl"
                 value={form.patientReference}
@@ -312,6 +363,7 @@ const ConnectedHospitalsPage = () => {
                 value={form.shortDescription}
                 onChange={e => setForm(f => ({ ...f, shortDescription: e.target.value }))}
                 maxLength={500}
+                placeholder="Patient requires urgent cardiac intervention and ICU support."
               />
             </div>
             <DialogFooter className="gap-2">

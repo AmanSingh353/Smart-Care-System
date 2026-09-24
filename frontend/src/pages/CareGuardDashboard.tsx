@@ -26,6 +26,7 @@ import {
   networkService,
   type AssistancePriority,
   type AssistanceRequest,
+  type Hospital,
   type NetworkSummary,
 } from "@/services/networkService";
 
@@ -51,26 +52,33 @@ function fmt(iso: string) {
 const CareGuardDashboard = () => {
   const { summary, getRoleSignals, openSignals, resetDemoSignals } = useCareGuard();
   const { resetDemoData } = usePatients();
-  const { role, getAccessToken, staff } = useAuth();
+  const { role, getAccessToken, staff, loading: authLoading } = useAuth();
 
   const [netSummary, setNetSummary] = useState<NetworkSummary | null>(null);
   const [recentRequests, setRecentRequests] = useState<AssistanceRequest[]>([]);
+  const [hospitals, setHospitals] = useState<Hospital[]>([]);
   const [netError, setNetError] = useState<string | null>(null);
 
+  const hospitalName = (hospitalId: string) =>
+    hospitals.find(h => h.hospitalId === hospitalId)?.hospitalName || hospitalId;
+
   const refreshNetwork = useCallback(async () => {
+    if (authLoading) return;
     const token = await getAccessToken();
     if (!token) return;
-    const [sum, req] = await Promise.all([
+    const [sum, req, hosp] = await Promise.all([
       networkService.getSummary(token),
       networkService.listAssistance(token),
+      networkService.listHospitals(token, { includeLocal: true }),
     ]);
     setNetSummary(sum.summary);
+    setHospitals(hosp.hospitals);
     setRecentRequests(
-      req.requests
-        .filter(r => ["PENDING", "ACCEPTED", "IN_PROGRESS"].includes(r.status))
-        .slice(0, 8)
+      [...req.requests]
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+        .slice(0, 10)
     );
-  }, [getAccessToken]);
+  }, [authLoading, getAccessToken]);
 
   useEffect(() => {
     refreshNetwork().catch(err => setNetError(formatNetworkError(err)));
@@ -98,22 +106,22 @@ const CareGuardDashboard = () => {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
         <StatCard
-          label="Active emergency requests"
+          label="Active Requests"
           value={netSummary?.activeEmergencyRequests ?? 0}
           icon={Siren}
         />
         <StatCard
-          label="Pending assistance"
+          label="Pending Requests"
           value={netSummary?.pendingAssistanceRequests ?? 0}
           icon={AlertTriangle}
         />
         <StatCard
-          label="Accepted requests"
+          label="Accepted Requests"
           value={netSummary?.acceptedRequests ?? 0}
           icon={ClipboardCheck}
         />
         <StatCard
-          label="Resolved requests"
+          label="Resolved Requests"
           value={netSummary?.resolvedRequests ?? 0}
           icon={CheckCircle2}
         />
@@ -146,9 +154,9 @@ const CareGuardDashboard = () => {
 
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-          Assistance requests needing attention
+          Recent / Active Requests
         </h3>
-        <span className="text-xs text-muted-foreground">{recentRequests.length} active</span>
+        <span className="text-xs text-muted-foreground">{recentRequests.length} shown</span>
       </div>
 
       {recentRequests.length === 0 ? (
@@ -156,7 +164,7 @@ const CareGuardDashboard = () => {
           <CardContent className="py-4">
             <EmptyState
               icon={CheckCircle2}
-              title="No active assistance requests"
+              title="No assistance requests yet"
               description="When your hospital sends or receives a CareGuard assistance request, it will appear here."
             />
           </CardContent>
@@ -169,7 +177,8 @@ const CareGuardDashboard = () => {
                 <div className="min-w-0">
                   <p className="font-mono text-sm font-semibold">{r.requestId}</p>
                   <p className="text-xs text-muted-foreground truncate">
-                    {r.emergencyType} · {r.requiredDepartment} · {fmt(r.createdAt)}
+                    {r.emergencyType} · {hospitalName(r.requestingHospitalId)} →{" "}
+                    {hospitalName(r.targetHospitalId)} · {fmt(r.updatedAt || r.createdAt)}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">

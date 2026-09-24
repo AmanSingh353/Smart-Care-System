@@ -38,8 +38,9 @@ function fmt(iso: string) {
 }
 
 const IncomingRequestsPage = () => {
-  const { getAccessToken, role } = useAuth();
+  const { getAccessToken, role, staff, loading: authLoading } = useAuth();
   const canAct = role === "admin" || role === "doctor" || role === "nurse";
+  const isPlatform = Boolean(staff?.isPlatformAdmin);
 
   const [requests, setRequests] = useState<AssistanceRequest[]>([]);
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
@@ -48,6 +49,7 @@ const IncomingRequestsPage = () => {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    if (authLoading) return;
     const token = await getAccessToken();
     if (!token) return;
     const [reqRes, hospRes] = await Promise.all([
@@ -56,7 +58,7 @@ const IncomingRequestsPage = () => {
     ]);
     setRequests(reqRes.requests);
     setHospitals(hospRes.hospitals);
-  }, [getAccessToken]);
+  }, [authLoading, getAccessToken]);
 
   useEffect(() => {
     refresh().catch(err => setError(formatNetworkError(err)));
@@ -90,7 +92,11 @@ const IncomingRequestsPage = () => {
     <StaffLayout allowedRoles={["admin", "doctor", "nurse"]}>
       <PageHeader
         title="Incoming Requests"
-        description="Assistance requests sent to this hospital. Accept, start, and resolve through CareGuard."
+        description={
+          isPlatform
+            ? "Network-wide CareGuard assistance requests. Accept, start, and resolve on behalf of partner hospitals for the demo."
+            : "Assistance requests sent to this hospital. Accept, start, and resolve through CareGuard."
+        }
       />
 
       <div className="flex gap-2 mb-4">
@@ -124,9 +130,19 @@ const IncomingRequestsPage = () => {
               <CardContent className="pt-4 pb-4 space-y-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="font-semibold text-foreground font-mono text-sm">{r.requestId}</p>
+                    <p className="font-semibold text-foreground font-mono text-sm">
+                      CareGuard Request #{r.requestId}
+                    </p>
                     <p className="text-sm text-muted-foreground mt-0.5">
                       From {hospitalName(r.requestingHospitalId)}
+                      {isPlatform ? (
+                        <>
+                          {" → "}
+                          <span className="text-foreground font-medium">
+                            {hospitalName(r.targetHospitalId)}
+                          </span>
+                        </>
+                      ) : null}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -138,8 +154,11 @@ const IncomingRequestsPage = () => {
                     >
                       {r.priority}
                     </span>
-                    <Badge variant="secondary" className="text-[10px]">
-                      {r.status}
+                    <Badge
+                      variant={r.status === "RESOLVED" ? "outline" : "secondary"}
+                      className="text-[10px]"
+                    >
+                      {r.status === "RESOLVED" ? "Resolved" : r.status}
                     </Badge>
                   </div>
                 </div>
@@ -150,8 +169,13 @@ const IncomingRequestsPage = () => {
                     <p className="font-medium">{r.emergencyType}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] uppercase text-muted-foreground">Department</p>
-                    <p className="font-medium">{r.requiredDepartment}</p>
+                    <p className="text-[10px] uppercase text-muted-foreground">Required</p>
+                    <p className="font-medium">
+                      {r.requiredDepartment}
+                      {r.requiredFacilities.length
+                        ? ` + ${r.requiredFacilities.join(", ")}`
+                        : ""}
+                    </p>
                   </div>
                   <div>
                     <p className="text-[10px] uppercase text-muted-foreground">Facilities</p>
@@ -212,6 +236,9 @@ const IncomingRequestsPage = () => {
                       >
                         Mark Resolved
                       </Button>
+                    )}
+                    {r.status === "RESOLVED" && (
+                      <span className="text-sm font-medium text-muted-foreground">Resolved</span>
                     )}
                   </div>
                 )}
