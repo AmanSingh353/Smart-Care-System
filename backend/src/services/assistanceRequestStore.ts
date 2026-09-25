@@ -63,7 +63,7 @@ const AssistanceSchema = new Schema<AssistanceMongo>(
     patientReference: { type: String, default: "" },
     status: { type: String, required: true, enum: ASSISTANCE_STATUSES, default: "PENDING" },
   },
-  { timestamps: true }
+  { timestamps: true, collection: "assistancerequests" }
 );
 
 let AssistanceModel: Model<AssistanceMongo> | null = null;
@@ -158,18 +158,28 @@ export async function initAssistanceRequestStore(): Promise<void> {
     return;
   }
   try {
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(env.mongoUri);
+    if (mongoose.connection.readyState !== 1) {
+      throw new Error("MongoDB not connected — check MONGODB_URI / Atlas network access");
     }
     AssistanceModel =
       mongoose.models.AssistanceRequest ||
       mongoose.model<AssistanceMongo>("AssistanceRequest", AssistanceSchema);
     mongoReady = true;
     fileStoreReady = false;
-    console.log("[assistance] MongoDB assistance store ready — no requests auto-seeded");
+    const docs = await AssistanceModel.find().select("requestId").lean();
+    let maxN = 0;
+    for (const d of docs) {
+      const m = /^CG-(\d+)$/.exec(String((d as { requestId?: string }).requestId || ""));
+      if (m) maxN = Math.max(maxN, Number(m[1]));
+    }
+    seq = Math.max(1, maxN - 1000 + 1, docs.length + 1);
+    console.log(
+      `[assistance] MongoDB assistance store ready (collection=assistancerequests, ${docs.length} record(s))`
+    );
   } catch (err) {
-    console.error("[assistance] Mongo connect failed — falling back to file store", err);
+    console.error("[assistance] Mongo assistance store failed — falling back to file store", err);
     mongoReady = false;
+    AssistanceModel = null;
     await loadFileStore();
   }
 }
@@ -282,8 +292,8 @@ export async function updateAssistanceStatus(
   if (mongoReady && AssistanceModel) {
     const doc = await AssistanceModel.findByIdAndUpdate(
       id,
-      { $set: { status } },
-      { new: true }
+      { $set: { status }, $currentDate: { updatedAt: true } },
+      { returnDocument: "after" }
     ).lean();
     return doc ? fromMongo(doc as never) : null;
   }

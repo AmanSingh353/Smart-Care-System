@@ -62,7 +62,7 @@ const HospitalSchema = new Schema<HospitalMongo>(
     status: { type: String, required: true, enum: HOSPITAL_STATUSES, default: "ONLINE" },
     isLocal: { type: Boolean, default: false },
   },
-  { timestamps: true }
+  { timestamps: true, collection: "hospitals" }
 );
 
 let HospitalModel: Model<HospitalMongo> | null = null;
@@ -160,17 +160,21 @@ export async function initHospitalStore(): Promise<void> {
     return;
   }
   try {
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(env.mongoUri);
+    if (mongoose.connection.readyState !== 1) {
+      throw new Error("MongoDB not connected — check MONGODB_URI / Atlas network access");
     }
     HospitalModel =
       mongoose.models.Hospital || mongoose.model<HospitalMongo>("Hospital", HospitalSchema);
     mongoReady = true;
     fileStoreReady = false;
-    console.log("[hospitals] MongoDB hospital store ready — no partner hospitals auto-seeded");
+    const count = await HospitalModel.countDocuments();
+    console.log(
+      `[hospitals] MongoDB hospital store ready (collection=hospitals, ${count} record(s))`
+    );
   } catch (err) {
-    console.error("[hospitals] Mongo connect failed — falling back to file store", err);
+    console.error("[hospitals] Mongo hospital store failed — falling back to file store", err);
     mongoReady = false;
+    HospitalModel = null;
     await loadFileStore();
   }
 }
@@ -361,7 +365,7 @@ export async function updateHospital(
     }
   }
   if (mongoReady && HospitalModel) {
-    const doc = await HospitalModel.findByIdAndUpdate(id, { $set: patch }, { new: true }).lean();
+    const doc = await HospitalModel.findByIdAndUpdate(id, { $set: patch }, { returnDocument: "after" }).lean();
     return doc ? fromMongo(doc as never) : null;
   }
   const cur = memory.get(id);

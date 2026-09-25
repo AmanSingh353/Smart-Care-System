@@ -57,7 +57,7 @@ const StaffUserSchema = new Schema<StaffUserMongo>(
     mustChangePassword: { type: Boolean, default: false },
     lastLoginAt: { type: Date, default: null },
   },
-  { timestamps: true }
+  { timestamps: true, collection: "staffusers" }
 );
 
 let StaffModel: Model<StaffUserMongo> | null = null;
@@ -145,17 +145,62 @@ export async function initUserStore(): Promise<void> {
     return;
   }
   try {
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(env.mongoUri);
+    if (mongoose.connection.readyState !== 1) {
+      throw new Error("MongoDB not connected — check MONGODB_URI / Atlas network access");
     }
-    StaffModel = mongoose.models.StaffUser || mongoose.model<StaffUserMongo>("StaffUser", StaffUserSchema);
+    StaffModel =
+      mongoose.models.StaffUser || mongoose.model<StaffUserMongo>("StaffUser", StaffUserSchema);
     mongoReady = true;
     fileStoreReady = false;
-    console.log("[users] MongoDB staff store ready — no auto-seeded staff");
+    const count = await StaffModel.countDocuments();
+    console.log(`[users] MongoDB staff store ready (collection=staffusers, ${count} record(s))`);
+    // Import any local JSON staff that are not yet in Atlas (by email). Never overwrites.
+    await importStaffFromJsonIfPresent();
   } catch (err) {
-    console.error("[users] Mongo connect failed — falling back to file staff store", err);
+    console.error("[users] Mongo staff store failed — falling back to file staff store", err);
     mongoReady = false;
+    StaffModel = null;
     await loadFileStore();
+  }
+}
+
+/** One-time bridge: copy local JSON staff into Atlas when the collection is empty. Never overwrites. */
+async function importStaffFromJsonIfPresent(): Promise<void> {
+  if (!mongoReady || !StaffModel) return;
+  try {
+    const raw = await fs.readFile(STAFF_FILE, "utf8");
+    const parsed = JSON.parse(raw) as StaffFilePayload;
+    const users = Array.isArray(parsed.users) ? parsed.users : [];
+    let imported = 0;
+    for (const u of users) {
+      if (!u?.email || !u?.staffId) continue;
+      const email = String(u.email).toLowerCase();
+      const exists = await StaffModel.findOne({ email }).lean();
+      if (exists) continue;
+      await StaffModel.create({
+        firebaseUid: u.firebaseUid ?? null,
+        email,
+        fullName: String(u.fullName || email),
+        role: u.role,
+        department: String(u.department || ""),
+        staffId: String(u.staffId),
+        status: u.status || "ACTIVE",
+        hospitalId: u.hospitalId ?? null,
+        isPlatformAdmin: Boolean(u.isPlatformAdmin),
+        mustChangePassword: Boolean(u.mustChangePassword),
+        lastLoginAt: u.lastLoginAt ? new Date(u.lastLoginAt) : null,
+      });
+      imported += 1;
+    }
+    if (imported) {
+      console.log(`[users] Imported ${imported} staff record(s) from JSON into MongoDB (one-time)`);
+    }
+  } catch (err: unknown) {
+    const code =
+      err && typeof err === "object" && "code" in err ? String((err as { code: string }).code) : "";
+    if (code !== "ENOENT") {
+      console.warn("[users] JSON→Mongo staff import skipped:", err);
+    }
   }
 }
 
@@ -326,7 +371,7 @@ export async function updateStaffUser(
     if (patch.lastLoginAt !== undefined) {
       mongoPatch.lastLoginAt = patch.lastLoginAt ? new Date(patch.lastLoginAt) : null;
     }
-    const doc = await StaffModel.findByIdAndUpdate(id, { $set: mongoPatch }, { new: true }).lean();
+    const doc = await StaffModel.findByIdAndUpdate(id, { $set: mongoPatch }, { returnDocument: "after" }).lean();
     return doc ? fromMongo(doc as never) : null;
   }
   const cur = memory.get(id);

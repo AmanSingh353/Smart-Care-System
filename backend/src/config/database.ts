@@ -1,6 +1,6 @@
 /**
  * Database / staff-store bootstrap.
- * MongoDB when MONGODB_URI is set; otherwise durable local file stores.
+ * MongoDB Atlas when MONGODB_URI is set; otherwise durable local JSON file stores.
  * Demo hospital network + bootstrap admin are idempotent and never wipe records.
  */
 import mongoose from "mongoose";
@@ -15,17 +15,23 @@ import {
   ensureDemoHospitalNetwork,
 } from "../services/demoHospitalNetwork";
 
+/** Atlas database name for this deployment (collections: hospitals, staffusers, assistancerequests). */
+export const MONGO_DB_NAME = "smart-care";
+
 export async function connectDatabase(): Promise<void> {
   initFirebaseAdmin();
 
   if (!env.mongoUri) {
-    console.log("[db] MONGODB_URI not set — StaffUser / Hospital / AssistanceRequest use local file stores");
+    console.log(
+      "[db] MONGODB_URI not set — StaffUser / Hospital / AssistanceRequest use local file stores"
+    );
   } else {
     try {
-      await mongoose.connect(env.mongoUri);
-      console.log("[db] MongoDB connected");
+      await mongoose.connect(env.mongoUri, { dbName: MONGO_DB_NAME });
+      const host = mongoose.connection.host || "atlas";
+      console.log(`[db] MongoDB Atlas connected — db=${MONGO_DB_NAME} host=${host}`);
     } catch (err) {
-      console.error("[db] MongoDB connection failed — falling back to file stores", err);
+      console.error("[db] MongoDB connection failed — stores will fall back to JSON files", err);
     }
   }
 
@@ -38,4 +44,12 @@ export async function connectDatabase(): Promise<void> {
   await migrateStaffHospitalAssignments(
     local?.hospitalId || env.localHospitalId || DEMO_SMART_CARE_ID
   );
+
+  if (mongoose.connection.readyState === 1) {
+    console.log(
+      "[db] Active persistence: MongoDB Atlas (hospitals, staffusers, assistancerequests)"
+    );
+  } else {
+    console.log("[db] Active persistence: local JSON file stores");
+  }
 }
