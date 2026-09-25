@@ -380,7 +380,7 @@ export const ROLE_NAV: Record<StaffRole, { label: string; path: string }[]> = {
     { label: "Lab", path: "/lab" },
     { label: "Billing", path: "/billing" },
     { label: "Staff Management", path: "/admin/staff" },
-    { label: "Hospital Network", path: "/admin/network" },
+    { label: "Platform Administration", path: "/admin/platform" },
   ],
   reception: [{ label: "Registration", path: "/reception" }],
   doctor: [

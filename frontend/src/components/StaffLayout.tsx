@@ -46,7 +46,7 @@ const GROUP_LABELS: Record<StaffRole, { title: string; paths?: string[] }[]> = {
     { title: "Overview", paths: ["/admin", "/careguard", "/careguard/hospitals"] },
     { title: "Clinical", paths: ["/doctor", "/nurse"] },
     { title: "Diagnostics", paths: ["/lab", "/pharmacy"] },
-    { title: "Operations", paths: ["/reception", "/billing", "/admin/staff", "/admin/network"] },
+    { title: "Operations", paths: ["/reception", "/billing", "/admin/staff", "/admin/platform", "/admin/network"] },
   ],
   reception: [{ title: "Front desk" }],
   doctor: [{ title: "Clinical", paths: ["/doctor", "/careguard", "/careguard/hospitals"] }],
@@ -92,8 +92,13 @@ export const StaffLayout = ({ children, allowedRoles }: { children: ReactNode; a
   }
 
   const navItems = (ROLE_NAV[role] || []).filter(item => {
-    // Platform network registration is not a hospital-facing admin workflow
-    if (item.path === "/admin/network" && !staff?.isPlatformAdmin) return false;
+    // Platform Administration is not a hospital-facing admin workflow
+    if (
+      (item.path === "/admin/platform" || item.path === "/admin/network") &&
+      !staff?.isPlatformAdmin
+    ) {
+      return false;
+    }
     return true;
   });
   const groups = GROUP_LABELS[role] || [{ title: "Workspace" }];

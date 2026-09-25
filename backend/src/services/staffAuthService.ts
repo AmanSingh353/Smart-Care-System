@@ -430,6 +430,171 @@ export async function createStaffAccount(input: {
   }
 }
 
+/**
+ * Platform-only: create/link a Hospital Admin (role=admin, isPlatformAdmin=false)
+ * for a specific hospital. Reuses Firebase identity if email already exists.
+ */
+export async function createHospitalAdminAccount(input: {
+  fullName: string;
+  email: string;
+  department: string;
+  staffId: string;
+  temporaryPassword?: string;
+  hospitalId: string;
+}): Promise<{ user: StaffUser; linkedExistingFirebase: boolean; createdFirebase: boolean }> {
+  if (!input.email?.trim() || !input.fullName?.trim() || !input.staffId?.trim()) {
+    throw new AuthError("fullName, email, and staffId are required", 400, "VALIDATION");
+  }
+  const hospitalId = input.hospitalId?.trim();
+  if (!hospitalId) {
+    throw new AuthError("hospitalId is required", 400, "VALIDATION");
+  }
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email.trim());
+  if (!emailOk) throw new AuthError("Enter a valid email address", 400, "INVALID_EMAIL");
+
+  const email = input.email.trim().toLowerCase();
+  const fullName = input.fullName.trim();
+  const department = (input.department || "Administration").trim();
+  const staffId = input.staffId.trim();
+
+  const auth = getFirebaseAuth();
+  if (!auth) {
+    throw new AuthError(
+      "Firebase Admin is not configured. Cannot create staff authentication identity.",
+      503,
+      "FIREBASE_NOT_CONFIGURED"
+    );
+  }
+
+  let firebaseUid: string | null = null;
+  let linkedExistingFirebase = false;
+  let createdFirebase = false;
+  try {
+    const existingFb = await auth.getUserByEmail(email);
+    firebaseUid = existingFb.uid;
+    linkedExistingFirebase = true;
+  } catch (err: unknown) {
+    const code = err && typeof err === "object" && "code" in err ? String((err as { code: string }).code) : "";
+    if (code !== "auth/user-not-found") {
+      throw new AuthError(
+        err instanceof Error ? err.message : "Firebase lookup failed",
+        502,
+        "FIREBASE_LOOKUP_FAILED"
+      );
+    }
+  }
+
+  if (!firebaseUid) {
+    const temporaryPassword = input.temporaryPassword?.trim() || "";
+    if (temporaryPassword.length < 8) {
+      throw new AuthError(
+        "Temporary password must be at least 8 characters when creating a new Firebase account.",
+        400,
+        "INVALID_PASSWORD"
+      );
+    }
+    try {
+      const fb = await auth.createUser({
+        email,
+        password: temporaryPassword,
+        displayName: fullName,
+        emailVerified: false,
+        disabled: false,
+      });
+      firebaseUid = fb.uid;
+      createdFirebase = true;
+    } catch (err: unknown) {
+      const code = err && typeof err === "object" && "code" in err ? String((err as { code: string }).code) : "";
+      if (code === "auth/email-already-exists") {
+        const existingFb = await auth.getUserByEmail(email);
+        firebaseUid = existingFb.uid;
+        linkedExistingFirebase = true;
+      } else if (code === "auth/invalid-password" || code === "auth/weak-password") {
+        throw new AuthError(
+          "Temporary password does not meet Firebase password requirements.",
+          400,
+          "INVALID_PASSWORD"
+        );
+      } else {
+        throw new AuthError(
+          err instanceof Error ? err.message : "Failed to create Firebase user",
+          502,
+          "FIREBASE_CREATE_FAILED"
+        );
+      }
+    }
+  }
+
+  const byEmail = await findByEmail(email);
+  const byUid = await findByFirebaseUid(firebaseUid);
+  const existingStaff = byEmail || byUid;
+
+  if (existingStaff) {
+    if (byEmail && byUid && byEmail.id !== byUid.id) {
+      throw new AuthError(
+        "This email and Firebase identity are linked to different staff records.",
+        409,
+        "STAFF_IDENTITY_CONFLICT"
+      );
+    }
+    if (existingStaff.isPlatformAdmin) {
+      throw new AuthError(
+        "Cannot assign a platform administrator as a hospital-only admin.",
+        409,
+        "PLATFORM_ADMIN_CONFLICT"
+      );
+    }
+    if (existingStaff.hospitalId && existingStaff.hospitalId !== hospitalId) {
+      throw new AuthError(
+        "This staff identity already belongs to another hospital.",
+        409,
+        "HOSPITAL_MISMATCH"
+      );
+    }
+
+    const updated = await updateStaffUser(existingStaff.id, {
+      fullName,
+      role: "admin",
+      department,
+      staffId,
+      status: "ACTIVE",
+      firebaseUid,
+      hospitalId,
+      isPlatformAdmin: false,
+      mustChangePassword: createdFirebase ? true : existingStaff.mustChangePassword,
+    });
+    if (!updated) throw new AuthError("Failed to update staff user", 500, "UPDATE_FAILED");
+    return { user: updated, linkedExistingFirebase, createdFirebase: false };
+  }
+
+  try {
+    const user = await createStaffUser({
+      email,
+      fullName,
+      role: "admin",
+      department,
+      staffId,
+      status: "ACTIVE",
+      firebaseUid,
+      hospitalId,
+      isPlatformAdmin: false,
+      mustChangePassword: createdFirebase,
+    });
+    return { user, linkedExistingFirebase, createdFirebase };
+  } catch (err: unknown) {
+    if (createdFirebase && firebaseUid) {
+      await auth.deleteUser(firebaseUid).catch(() => undefined);
+    }
+    const statusCode = (err as { status?: number }).status || 500;
+    const code = (err as { code?: string }).code || "CREATE_FAILED";
+    throw new AuthError(
+      err instanceof Error ? err.message : "Failed to create hospital admin",
+      statusCode,
+      code
+    );
+  }
+}
+
 /** Clear first-login password-change flag after the staff member updates their Firebase password. */
 export async function completePasswordChange(userId: string): Promise<StaffUser> {
   const user = await updateStaffUser(userId, { mustChangePassword: false });

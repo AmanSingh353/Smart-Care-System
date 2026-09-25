@@ -247,6 +247,36 @@ export async function findHospitalByHospitalId(hospitalId: string): Promise<Hosp
   return [...memory.values()].find(h => h.hospitalId === key) || null;
 }
 
+export async function findHospitalByRegistrationId(registrationId: string): Promise<Hospital | null> {
+  const key = registrationId.trim();
+  if (!key) return null;
+  if (mongoReady && HospitalModel) {
+    const doc = await HospitalModel.findOne({
+      registrationId: { $regex: new RegExp(`^${escapeRegExp(key)}$`, "i") },
+    }).lean();
+    return doc ? fromMongo(doc as never) : null;
+  }
+  return (
+    [...memory.values()].find(h => h.registrationId.trim().toLowerCase() === key.toLowerCase()) ||
+    null
+  );
+}
+
+/** Next HOSP-NNN id (preserves HOSP-001…HOSP-003; never overwrites). */
+export async function allocateNextHospitalId(): Promise<string> {
+  const all = await listHospitals();
+  let max = 0;
+  for (const h of all) {
+    const m = /^HOSP-(\d+)$/i.exec(h.hospitalId.trim());
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `HOSP-${String(max + 1).padStart(3, "0")}`;
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export async function getLocalHospital(): Promise<Hospital | null> {
   if (mongoReady && HospitalModel) {
     const doc = await HospitalModel.findOne({ isLocal: true }).lean();

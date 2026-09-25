@@ -262,7 +262,7 @@ const CareGuardDashboard = () => {
           </Button>
           {role === "admin" && staff?.isPlatformAdmin && (
             <Button asChild size="sm" variant="ghost">
-              <Link to="/admin/network">Platform Network</Link>
+              <Link to="/admin/platform">Platform Administration</Link>
             </Button>
           )}
         </div>
