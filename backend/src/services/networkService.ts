@@ -22,6 +22,15 @@ import {
   listHospitals,
   updateHospital,
 } from "./hospitalStore";
+import { buildEmergencySnapshot } from "../models/Patient";
+import { findPatientByPatientId, toPublicPatient } from "./patientStore";
+import {
+  activateAccessGrant,
+  closeAccessGrantByRequestId,
+  findActiveGrantForTarget,
+  findGrantByRequestId,
+  toPublicAccessGrant,
+} from "./patientAccessGrantStore";
 
 export class NetworkError extends Error {
   status: number;
@@ -277,6 +286,27 @@ export async function createAssistance(
     );
   }
 
+  const patientIdRaw = String(input.patientId || input.patientReference || "").trim();
+  if (!patientIdRaw) {
+    throw new NetworkError("patientId is required", 400, "VALIDATION");
+  }
+
+  const patient = await findPatientByPatientId(patientIdRaw);
+  if (!patient) {
+    throw new NetworkError("Patient not found", 404, "PATIENT_NOT_FOUND");
+  }
+  // Requesting hospital may only attach patients from their own hospital context
+  if (patient.homeHospitalId !== requestingHospitalId) {
+    throw new NetworkError(
+      "You can only create assistance requests for patients registered at your hospital",
+      403,
+      "PATIENT_HOSPITAL_MISMATCH"
+    );
+  }
+
+  const snapshot = buildEmergencySnapshot(patient);
+  const requestedProcedure = String(input.requestedProcedure || "").trim();
+
   const request = await createAssistanceRequest({
     requestingHospitalId,
     targetHospitalId,
@@ -287,7 +317,10 @@ export async function createAssistance(
     requiredDepartment,
     requiredFacilities: parseList(input.requiredFacilities),
     shortDescription: String(input.shortDescription || ""),
-    patientReference: String(input.patientReference || ""),
+    requestedProcedure,
+    patientId: patient.patientId,
+    patientReference: patient.patientId,
+    patientSnapshot: snapshot,
   });
 
   return toPublicAssistanceRequest(request);
@@ -400,5 +433,103 @@ export async function changeAssistanceStatus(
 
   const updated = await updateAssistanceStatus(id, nextStatus);
   if (!updated) throw new NetworkError("Assistance request not found", 404, "REQUEST_NOT_FOUND");
+
+  // Access grant lifecycle (Level 2 expanded record)
+  if (updated.patientId) {
+    if (nextStatus === "ACCEPTED") {
+      await activateAccessGrant({
+        requestId: updated.requestId,
+        assistanceId: updated.id,
+        patientId: updated.patientId,
+        requestingHospitalId: updated.requestingHospitalId,
+        targetHospitalId: updated.targetHospitalId,
+      });
+    } else if (nextStatus === "RESOLVED" || nextStatus === "CANCELLED" || nextStatus === "REJECTED") {
+      await closeAccessGrantByRequestId(
+        updated.requestId,
+        nextStatus === "RESOLVED" ? "CLOSED" : "REVOKED"
+      );
+    }
+  }
+
   return toPublicAssistanceRequest(updated);
+}
+
+/** Level 1 — emergency handover summary (visible to requester + target once request exists). */
+export async function getAssistancePatientSummary(
+  id: string,
+  actor: { hospitalId?: string | null; isPlatformAdmin?: boolean }
+) {
+  const row = await findAssistanceById(id);
+  if (!row) throw new NetworkError("Assistance request not found", 404, "REQUEST_NOT_FOUND");
+  if (
+    !actor.isPlatformAdmin &&
+    actor.hospitalId &&
+    row.requestingHospitalId !== actor.hospitalId &&
+    row.targetHospitalId !== actor.hospitalId
+  ) {
+    throw new NetworkError("Not authorized to view this request", 403, "FORBIDDEN");
+  }
+
+  const grant = row.patientId ? await findGrantByRequestId(row.requestId) : null;
+  return {
+    request: toPublicAssistanceRequest(row),
+    emergencySummary: row.patientSnapshot,
+    accessStatus: grant?.status || (row.status === "PENDING" ? "NONE" : "NONE"),
+  };
+}
+
+/** Level 2 — expanded patient record (target hospital only, after ACTIVE grant). */
+export async function getAssistancePatientRecord(
+  id: string,
+  actor: { hospitalId?: string | null; isPlatformAdmin?: boolean }
+) {
+  const row = await findAssistanceById(id);
+  if (!row) throw new NetworkError("Assistance request not found", 404, "REQUEST_NOT_FOUND");
+  if (!row.patientId) {
+    throw new NetworkError("This request has no linked patient ID", 404, "PATIENT_NOT_LINKED");
+  }
+
+  const actorHospitalId = actor.hospitalId || "";
+  const isTarget = Boolean(actorHospitalId && row.targetHospitalId === actorHospitalId);
+  const isPlatform = Boolean(actor.isPlatformAdmin);
+
+  if (!isPlatform && !isTarget) {
+    throw new NetworkError(
+      "Only the receiving hospital can open the expanded patient record",
+      403,
+      "FORBIDDEN"
+    );
+  }
+
+  const grant = await findActiveGrantForTarget({
+    requestId: row.requestId,
+    targetHospitalId: row.targetHospitalId,
+    patientId: row.patientId,
+  });
+
+  if (!grant && !isPlatform) {
+    throw new NetworkError(
+      "Expanded patient record is not available until the assistance request is accepted",
+      403,
+      "ACCESS_NOT_GRANTED"
+    );
+  }
+
+  const patient = await findPatientByPatientId(row.patientId);
+  if (!patient) {
+    throw new NetworkError("Patient not found", 404, "PATIENT_NOT_FOUND");
+  }
+
+  const access = grant || (await findGrantByRequestId(row.requestId));
+
+  return {
+    requestId: row.requestId,
+    assistanceId: row.id,
+    accessStatus: access?.status || "CLOSED",
+    sharedUnder: `Shared under CareGuard Assistance Request ${row.requestId}`,
+    grant: access ? toPublicAccessGrant(access) : null,
+    patient: toPublicPatient(patient),
+    emergencySummary: row.patientSnapshot,
+  };
 }

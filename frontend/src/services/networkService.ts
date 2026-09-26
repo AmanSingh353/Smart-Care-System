@@ -29,6 +29,42 @@ export interface Hospital {
   updatedAt: string;
 }
 
+export interface PatientEmergencySnapshot {
+  patientName: string;
+  patientId: string;
+  age: number | null;
+  gender: string;
+  bloodGroup: string;
+  allergies: string;
+  currentMedications: string[];
+  currentCondition: string;
+  relevantDiagnosis: string;
+  relevantVitals: string;
+  relevantReports: string;
+  relevantClinicalSummary: string;
+}
+
+export interface NetworkPatient {
+  id: string;
+  patientId: string;
+  fullName: string;
+  dateOfBirth: string;
+  age: number | null;
+  gender: string;
+  bloodGroup: string;
+  phone: string;
+  allergies: string;
+  currentMedications: string[];
+  currentCondition: string;
+  diagnosis: string;
+  relevantVitals: string;
+  relevantReports: string;
+  clinicalSummary: string;
+  homeHospitalId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AssistanceRequest {
   id: string;
   requestId: string;
@@ -41,7 +77,10 @@ export interface AssistanceRequest {
   requiredDepartment: string;
   requiredFacilities: string[];
   shortDescription: string;
+  requestedProcedure: string;
+  patientId: string;
   patientReference: string;
+  patientSnapshot: PatientEmergencySnapshot | null;
   status: AssistanceStatus;
   createdAt: string;
   updatedAt: string;
@@ -135,6 +174,28 @@ export const networkService = {
       auth(token)
     ),
 
+  listPatients: (token: string, query?: { search?: string }) => {
+    const params = new URLSearchParams();
+    if (query?.search) params.set("search", query.search);
+    const qs = params.toString();
+    return api.get<{ patients: NetworkPatient[] }>(
+      `/api/patients${qs ? `?${qs}` : ""}`,
+      auth(token)
+    );
+  },
+
+  getPatient: (token: string, patientId: string) =>
+    api.get<{ patient: NetworkPatient }>(
+      `/api/patients/${encodeURIComponent(patientId)}`,
+      auth(token)
+    ),
+
+  createPatient: (
+    token: string,
+    body: Partial<NetworkPatient> & { fullName: string; name?: string }
+  ) =>
+    api.post<{ patient: NetworkPatient; message: string }>("/api/patients", body, auth(token)),
+
   listAssistance: (token: string, query?: { scope?: string; status?: string }) => {
     const params = new URLSearchParams();
     if (query?.scope) params.set("scope", query.scope);
@@ -155,6 +216,8 @@ export const networkService = {
       requiredDepartment: string;
       requiredFacilities?: string[];
       shortDescription?: string;
+      requestedProcedure?: string;
+      patientId: string;
       patientReference?: string;
     }
   ) =>
@@ -170,4 +233,21 @@ export const networkService = {
       { status },
       auth(token)
     ),
+
+  getPatientSummary: (token: string, id: string) =>
+    api.get<{
+      request: AssistanceRequest;
+      emergencySummary: PatientEmergencySnapshot | null;
+      accessStatus: string;
+    }>(`/api/assistance-requests/${encodeURIComponent(id)}/patient-summary`, auth(token)),
+
+  getPatientRecord: (token: string, id: string) =>
+    api.get<{
+      requestId: string;
+      assistanceId: string;
+      accessStatus: string;
+      sharedUnder: string;
+      patient: NetworkPatient;
+      emergencySummary: PatientEmergencySnapshot | null;
+    }>(`/api/assistance-requests/${encodeURIComponent(id)}/patient-record`, auth(token)),
 };

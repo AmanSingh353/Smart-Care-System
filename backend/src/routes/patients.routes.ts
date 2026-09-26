@@ -1,10 +1,13 @@
 import { Router } from "express";
-import { patientController } from "../controllers";
 import { requireAuth, requireStaff } from "../middleware/auth";
+import { networkPatientController } from "../controllers/patientController";
 
 const router = Router();
 
 router.use(requireAuth, requireStaff);
-router.get("/", patientController.list);
+
+router.get("/", networkPatientController.list);
+router.post("/", networkPatientController.create);
+router.get("/:patientId", networkPatientController.getByPatientId);
 
 export default router;

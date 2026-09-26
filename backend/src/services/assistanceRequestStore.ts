@@ -11,10 +11,12 @@ import {
   ASSISTANCE_STATUSES,
   normalizeAssistancePriority,
   normalizeAssistanceStatus,
+  normalizeSnapshot,
   type AssistancePriority,
   type AssistanceRequest,
   type AssistanceStatus,
 } from "../models/AssistanceRequest";
+import type { PatientEmergencySnapshot } from "../models/Patient";
 import { writeJsonAtomic } from "../utils/writeJsonAtomic";
 
 const memory = new Map<string, AssistanceRequest>();
@@ -42,11 +44,32 @@ interface AssistanceMongo {
   requiredDepartment: string;
   requiredFacilities: string[];
   shortDescription: string;
+  requestedProcedure: string;
+  patientId: string;
   patientReference: string;
+  patientSnapshot: PatientEmergencySnapshot | null;
   status: AssistanceStatus;
   createdAt: Date;
   updatedAt: Date;
 }
+
+const SnapshotSchema = new Schema(
+  {
+    patientName: { type: String, default: "" },
+    patientId: { type: String, default: "" },
+    age: { type: Number, default: null },
+    gender: { type: String, default: "" },
+    bloodGroup: { type: String, default: "" },
+    allergies: { type: String, default: "" },
+    currentMedications: { type: [String], default: [] },
+    currentCondition: { type: String, default: "" },
+    relevantDiagnosis: { type: String, default: "" },
+    relevantVitals: { type: String, default: "" },
+    relevantReports: { type: String, default: "" },
+    relevantClinicalSummary: { type: String, default: "" },
+  },
+  { _id: false }
+);
 
 const AssistanceSchema = new Schema<AssistanceMongo>(
   {
@@ -60,7 +83,10 @@ const AssistanceSchema = new Schema<AssistanceMongo>(
     requiredDepartment: { type: String, required: true },
     requiredFacilities: { type: [String], default: [] },
     shortDescription: { type: String, default: "" },
+    requestedProcedure: { type: String, default: "" },
+    patientId: { type: String, default: "", index: true },
     patientReference: { type: String, default: "" },
+    patientSnapshot: { type: SnapshotSchema, default: null },
     status: { type: String, required: true, enum: ASSISTANCE_STATUSES, default: "PENDING" },
   },
   { timestamps: true, collection: "assistancerequests" }
@@ -83,7 +109,10 @@ function fromMongo(
     requiredDepartment: doc.requiredDepartment,
     requiredFacilities: Array.isArray(doc.requiredFacilities) ? doc.requiredFacilities : [],
     shortDescription: doc.shortDescription || "",
-    patientReference: doc.patientReference || "",
+    requestedProcedure: doc.requestedProcedure || "",
+    patientId: doc.patientId || "",
+    patientReference: doc.patientReference || doc.patientId || "",
+    patientSnapshot: normalizeSnapshot(doc.patientSnapshot),
     status: doc.status,
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
@@ -92,6 +121,7 @@ function fromMongo(
 
 function normalizeRecord(r: Partial<AssistanceRequest> & { id?: string }): AssistanceRequest | null {
   if (!r?.requestId || !r?.requestingHospitalId || !r?.targetHospitalId) return null;
+  const patientId = String(r.patientId || "");
   return {
     id: String(r.id || `AR-${r.requestId}`),
     requestId: String(r.requestId),
@@ -104,7 +134,10 @@ function normalizeRecord(r: Partial<AssistanceRequest> & { id?: string }): Assis
     requiredDepartment: String(r.requiredDepartment || ""),
     requiredFacilities: Array.isArray(r.requiredFacilities) ? r.requiredFacilities.map(String) : [],
     shortDescription: String(r.shortDescription || ""),
-    patientReference: String(r.patientReference || ""),
+    requestedProcedure: String(r.requestedProcedure || ""),
+    patientId,
+    patientReference: String(r.patientReference || patientId || ""),
+    patientSnapshot: normalizeSnapshot(r.patientSnapshot),
     status: normalizeAssistanceStatus(String(r.status || "PENDING")) || "PENDING",
     createdAt: r.createdAt || new Date().toISOString(),
     updatedAt: r.updatedAt || new Date().toISOString(),
@@ -229,7 +262,10 @@ export async function createAssistanceRequest(input: {
   requiredDepartment: string;
   requiredFacilities?: string[];
   shortDescription?: string;
+  requestedProcedure?: string;
+  patientId?: string;
   patientReference?: string;
+  patientSnapshot?: PatientEmergencySnapshot | null;
 }): Promise<AssistanceRequest> {
   const n = seq++;
   const requestId = `CG-${1000 + n}`;
@@ -242,6 +278,10 @@ export async function createAssistanceRequest(input: {
   }
 
   const facilities = (input.requiredFacilities || []).map(f => f.trim()).filter(Boolean);
+  const patientId = (input.patientId || "").trim();
+  const patientReference = (input.patientReference || patientId || "").trim().slice(0, 64);
+  const snapshot = normalizeSnapshot(input.patientSnapshot);
+  const requestedProcedure = (input.requestedProcedure || "").trim().slice(0, 200);
 
   if (mongoReady && AssistanceModel) {
     const doc = await AssistanceModel.create({
@@ -255,7 +295,10 @@ export async function createAssistanceRequest(input: {
       requiredDepartment: input.requiredDepartment.trim(),
       requiredFacilities: facilities,
       shortDescription: (input.shortDescription || "").trim().slice(0, 500),
-      patientReference: (input.patientReference || "").trim().slice(0, 64),
+      requestedProcedure,
+      patientId,
+      patientReference,
+      patientSnapshot: snapshot,
       status: "PENDING",
     });
     return fromMongo(doc as never);
@@ -275,7 +318,10 @@ export async function createAssistanceRequest(input: {
     requiredDepartment: input.requiredDepartment.trim(),
     requiredFacilities: facilities,
     shortDescription: (input.shortDescription || "").trim().slice(0, 500),
-    patientReference: (input.patientReference || "").trim().slice(0, 64),
+    requestedProcedure,
+    patientId,
+    patientReference,
+    patientSnapshot: snapshot,
     status: "PENDING",
     createdAt: now,
     updatedAt: now,

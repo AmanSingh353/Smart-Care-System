@@ -465,12 +465,17 @@ const CareGuardDashboard = () => {
                 </div>
               ) : null}
 
-              {selected.patientReference ? (
+              {selected.patientId || selected.patientReference ? (
                 <div>
                   <p className="text-[10px] uppercase text-muted-foreground font-semibold">
-                    Patient Reference
+                    Patient
                   </p>
-                  <p className="text-sm font-mono mt-0.5">{selected.patientReference}</p>
+                  <p className="text-sm font-medium mt-0.5">
+                    {selected.patientSnapshot?.patientName || "—"}
+                  </p>
+                  <p className="text-sm font-mono mt-0.5">
+                    {selected.patientId || selected.patientReference}
+                  </p>
                 </div>
               ) : null}
 

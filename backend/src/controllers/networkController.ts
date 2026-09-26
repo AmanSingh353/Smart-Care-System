@@ -3,6 +3,8 @@ import {
   NetworkError,
   changeAssistanceStatus,
   createAssistance,
+  getAssistancePatientRecord,
+  getAssistancePatientSummary,
   getAssistancePublic,
   getHospitalPublic,
   getNetworkSummary,
@@ -161,6 +163,32 @@ export const assistanceController = {
         isPlatformAdmin: Boolean(req.user.isPlatformAdmin),
       });
       return res.json({ request, message: `Request marked ${request.status}.` });
+    } catch (err) {
+      return handleError(res, err);
+    }
+  },
+
+  /** Level 1 — emergency handover summary (requester or target). */
+  async patientSummary(req: Request, res: Response) {
+    try {
+      const data = await getAssistancePatientSummary(String(req.params.id || ""), {
+        hospitalId: actorHospitalId(req),
+        isPlatformAdmin: Boolean(req.user?.isPlatformAdmin),
+      });
+      return res.json(data);
+    } catch (err) {
+      return handleError(res, err);
+    }
+  },
+
+  /** Level 2 — expanded patient record (target + active grant only). */
+  async patientRecord(req: Request, res: Response) {
+    try {
+      const data = await getAssistancePatientRecord(String(req.params.id || ""), {
+        hospitalId: actorHospitalId(req),
+        isPlatformAdmin: Boolean(req.user?.isPlatformAdmin),
+      });
+      return res.json(data);
     } catch (err) {
       return handleError(res, err);
     }

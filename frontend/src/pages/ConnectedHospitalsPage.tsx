@@ -23,6 +23,7 @@ import {
   type AssistancePriority,
   type Hospital,
   type HospitalStatus,
+  type NetworkPatient,
 } from "@/services/networkService";
 import { Building2, Search, Siren } from "lucide-react";
 
@@ -69,17 +70,20 @@ const ConnectedHospitalsPage = () => {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [target, setTarget] = useState<Hospital | null>(null);
+  const [patientQuery, setPatientQuery] = useState("");
+  const [patientHits, setPatientHits] = useState<NetworkPatient[]>([]);
+  const [selectedPatient, setSelectedPatient] = useState<NetworkPatient | null>(null);
+  const [searchingPatients, setSearchingPatients] = useState(false);
   const [form, setForm] = useState({
     priority: "HIGH" as AssistancePriority,
     emergencyType: EMERGENCY_TYPES[0],
     requiredDepartment: DEPARTMENT_OPTIONS[0],
     requiredFacilities: FACILITY_OPTIONS[0],
+    requestedProcedure: "",
     shortDescription: "",
-    patientReference: "",
   });
 
   const refresh = useCallback(async () => {
-    // Page hooks run while StaffLayout still shows "Restoring session…" — wait for auth.
     if (authLoading) return;
     const token = await getAccessToken();
     if (!token) return;
@@ -95,6 +99,35 @@ const ConnectedHospitalsPage = () => {
     refresh().catch(err => setError(formatNetworkError(err)));
   }, [refresh]);
 
+  useEffect(() => {
+    if (!target) return;
+    const q = patientQuery.trim();
+    if (q.length < 2) {
+      setPatientHits([]);
+      return;
+    }
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      void (async () => {
+        setSearchingPatients(true);
+        try {
+          const token = await getAccessToken();
+          if (!token || cancelled) return;
+          const res = await networkService.listPatients(token, { search: q });
+          if (!cancelled) setPatientHits(res.patients.slice(0, 8));
+        } catch {
+          if (!cancelled) setPatientHits([]);
+        } finally {
+          if (!cancelled) setSearchingPatients(false);
+        }
+      })();
+    }, 280);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [patientQuery, target, getAccessToken]);
+
   const specialties = useMemo(() => {
     const set = new Set<string>();
     hospitals.forEach(h => h.departments.forEach(d => set.add(d)));
@@ -105,6 +138,9 @@ const ConnectedHospitalsPage = () => {
     setError(null);
     setMessage(null);
     setTarget(h);
+    setPatientQuery("");
+    setPatientHits([]);
+    setSelectedPatient(null);
     const dept =
       DEPARTMENT_OPTIONS.find(d => h.departments.includes(d)) ||
       h.departments[0] ||
@@ -114,18 +150,22 @@ const ConnectedHospitalsPage = () => {
       h.facilities[0] ||
       FACILITY_OPTIONS[0];
     setForm({
-      priority: "HIGH",
+      priority: "CRITICAL",
       emergencyType: EMERGENCY_TYPES[0],
       requiredDepartment: dept,
       requiredFacilities: facility,
+      requestedProcedure: "",
       shortDescription: "",
-      patientReference: "",
     });
   };
 
   const submitRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!target) return;
+    if (!selectedPatient) {
+      setError("Select a patient by Patient ID or name before sending the request.");
+      return;
+    }
     if (!form.emergencyType.trim() || !form.requiredDepartment.trim()) {
       setError("Emergency type and required department are required.");
       return;
@@ -143,10 +183,11 @@ const ConnectedHospitalsPage = () => {
         requiredFacilities: form.requiredFacilities
           ? [form.requiredFacilities.trim()].filter(Boolean)
           : [],
+        requestedProcedure: form.requestedProcedure.trim(),
         shortDescription: form.shortDescription.trim(),
-        patientReference: form.patientReference.trim(),
+        patientId: selectedPatient.patientId,
       });
-      setMessage(`${res.message} (${res.request.requestId})`);
+      setMessage(`${res.message} (${res.request.requestId}) — patient ${selectedPatient.patientId}`);
       setTarget(null);
     } catch (err) {
       setError(formatNetworkError(err));
@@ -277,12 +318,12 @@ const ConnectedHospitalsPage = () => {
       )}
 
       <Dialog open={!!target} onOpenChange={open => !open && setTarget(null)}>
-        <DialogContent className="sm:max-w-lg rounded-2xl">
+        <DialogContent className="sm:max-w-lg rounded-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Request Assistance</DialogTitle>
             <DialogDescription>
-              Send a CareGuard assistance request to {target?.hospitalName}. Only a patient reference
-              code is shared — no full patient record.
+              Select a network patient. An emergency handover summary is attached automatically — full
+              records stay private until the receiving hospital accepts.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submitRequest} className="grid gap-3">
@@ -291,6 +332,82 @@ const ConnectedHospitalsPage = () => {
               <p className="mt-1 text-sm font-medium text-foreground">{target?.hospitalName}</p>
               <p className="text-xs text-muted-foreground font-mono">{target?.hospitalId}</p>
             </div>
+
+            <div>
+              <Label>Patient (ID or name)</Label>
+              <Input
+                className="mt-1 rounded-xl"
+                value={patientQuery}
+                onChange={e => {
+                  setPatientQuery(e.target.value);
+                  setSelectedPatient(null);
+                }}
+                placeholder="SCP-2026-00125 or Rahul Sharma"
+              />
+              {searchingPatients && (
+                <p className="text-xs text-muted-foreground mt-1">Searching…</p>
+              )}
+              {!selectedPatient && patientHits.length > 0 && (
+                <ul className="mt-2 rounded-xl border border-border divide-y max-h-40 overflow-y-auto">
+                  {patientHits.map(p => (
+                    <li key={p.id}>
+                      <button
+                        type="button"
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted/60"
+                        onClick={() => {
+                          setSelectedPatient(p);
+                          setPatientQuery(`${p.fullName} (${p.patientId})`);
+                          setPatientHits([]);
+                        }}
+                      >
+                        <span className="font-medium">{p.fullName}</span>
+                        <span className="ml-2 font-mono text-xs text-muted-foreground">
+                          {p.patientId}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {selectedPatient && (
+              <div className="rounded-xl border border-border bg-muted/30 px-3 py-2.5 space-y-1.5">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
+                  Patient preview
+                </p>
+                <p className="text-sm font-semibold text-foreground">{selectedPatient.fullName}</p>
+                <p className="text-xs font-mono text-muted-foreground">{selectedPatient.patientId}</p>
+                <p className="text-xs text-muted-foreground">
+                  {[
+                    selectedPatient.age != null ? `${selectedPatient.age} years` : null,
+                    selectedPatient.gender || null,
+                    selectedPatient.bloodGroup ? `Blood Group: ${selectedPatient.bloodGroup}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || "—"}
+                </p>
+                {selectedPatient.allergies && (
+                  <p className="text-xs">
+                    <span className="text-muted-foreground">Allergies: </span>
+                    {selectedPatient.allergies}
+                  </p>
+                )}
+                {selectedPatient.currentMedications?.length > 0 && (
+                  <p className="text-xs">
+                    <span className="text-muted-foreground">Medications: </span>
+                    {selectedPatient.currentMedications.join(", ")}
+                  </p>
+                )}
+                {selectedPatient.currentCondition && (
+                  <p className="text-xs">
+                    <span className="text-muted-foreground">Condition: </span>
+                    {selectedPatient.currentCondition}
+                  </p>
+                )}
+              </div>
+            )}
+
             <div>
               <Label>Priority</Label>
               <select
@@ -348,12 +465,13 @@ const ConnectedHospitalsPage = () => {
               </select>
             </div>
             <div>
-              <Label>Patient reference (optional)</Label>
+              <Label>Possible procedure</Label>
               <Input
                 className="mt-1 rounded-xl"
-                value={form.patientReference}
-                onChange={e => setForm(f => ({ ...f, patientReference: e.target.value }))}
-                placeholder="PT-1042"
+                value={form.requestedProcedure}
+                onChange={e => setForm(f => ({ ...f, requestedProcedure: e.target.value }))}
+                placeholder="Cardiac Intervention"
+                maxLength={200}
               />
             </div>
             <div>
@@ -370,7 +488,7 @@ const ConnectedHospitalsPage = () => {
               <Button type="button" variant="outline" onClick={() => setTarget(null)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={busy}>
+              <Button type="submit" disabled={busy || !selectedPatient}>
                 {busy ? "Sending…" : "Send request"}
               </Button>
             </DialogFooter>

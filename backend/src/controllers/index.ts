@@ -26,6 +26,7 @@ export const authController = {
 
 // Staff Firebase auth controllers live in staffAuthController.ts
 
+/** Legacy stub kept for domainServices; CareGuard patients use networkPatientController. */
 export const patientController = {
   list(_req: Request, res: Response) {
     res.json(patientService.list());

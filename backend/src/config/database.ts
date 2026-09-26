@@ -10,12 +10,15 @@ import { initUserStore, migrateStaffHospitalAssignments } from "../services/user
 import { ensureBootstrapAdmin } from "../services/staffAuthService";
 import { getLocalHospital, initHospitalStore } from "../services/hospitalStore";
 import { initAssistanceRequestStore } from "../services/assistanceRequestStore";
+import { initPatientStore } from "../services/patientStore";
+import { initPatientAccessGrantStore } from "../services/patientAccessGrantStore";
+import { ensureDemoPatients } from "../services/demoPatients";
 import {
   DEMO_SMART_CARE_ID,
   ensureDemoHospitalNetwork,
 } from "../services/demoHospitalNetwork";
 
-/** Atlas database name for this deployment (collections: hospitals, staffusers, assistancerequests). */
+/** Atlas database name for this deployment. */
 export const MONGO_DB_NAME = "smart-care";
 
 export async function connectDatabase(): Promise<void> {
@@ -23,7 +26,7 @@ export async function connectDatabase(): Promise<void> {
 
   if (!env.mongoUri) {
     console.log(
-      "[db] MONGODB_URI not set — StaffUser / Hospital / AssistanceRequest use local file stores"
+      "[db] MONGODB_URI not set — StaffUser / Hospital / AssistanceRequest / Patient use local file stores"
     );
   } else {
     try {
@@ -38,7 +41,10 @@ export async function connectDatabase(): Promise<void> {
   await initUserStore();
   await initHospitalStore();
   await initAssistanceRequestStore();
+  await initPatientStore();
+  await initPatientAccessGrantStore();
   await ensureDemoHospitalNetwork();
+  await ensureDemoPatients();
   await ensureBootstrapAdmin();
   const local = await getLocalHospital();
   await migrateStaffHospitalAssignments(
@@ -47,7 +53,7 @@ export async function connectDatabase(): Promise<void> {
 
   if (mongoose.connection.readyState === 1) {
     console.log(
-      "[db] Active persistence: MongoDB Atlas (hospitals, staffusers, assistancerequests)"
+      "[db] Active persistence: MongoDB Atlas (hospitals, staffusers, assistancerequests, patients, patientaccessgrants)"
     );
   } else {
     console.log("[db] Active persistence: local JSON file stores");
